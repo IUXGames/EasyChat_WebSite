@@ -506,6 +506,12 @@ body {
   color: var(--text);
 }
 
+/* Let highlight.js control token colors when active */
+.prose pre code.hljs {
+  color: #abb2bf;
+  background: transparent;
+}
+
 .prose table {
   width: 100%;
   border-collapse: collapse;

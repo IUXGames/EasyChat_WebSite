@@ -89,7 +89,62 @@
 
   <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/gdscript.min.js"></script>
+  <script>
+  /* GDScript (Godot 4) language definition for highlight.js — inlined for reliability */
+  if (typeof hljs !== "undefined") {
+    hljs.registerLanguage("gdscript", function(hljs) {
+      return {
+        name: "GDScript",
+        aliases: ["gd"],
+        keywords: {
+          keyword: "and as assert await break breakpoint class class_name const continue elif else enum extends for func if in is match not null or pass preload return self signal static super var while",
+          literal: "true false null PI TAU INF NAN",
+          type: "bool int float String StringName NodePath Array Dictionary PackedByteArray PackedInt32Array PackedInt64Array PackedFloat32Array PackedFloat64Array PackedStringArray PackedVector2Array PackedVector3Array PackedColorArray Vector2 Vector2i Vector3 Vector3i Vector4 Vector4i Rect2 Rect2i Transform2D Transform3D Basis Quaternion Plane AABB Color RID Object",
+          built_in: "abs acos asin atan atan2 ceil clamp cos deg_to_rad ease exp floor fmod is_equal_approx is_inf is_instance_valid is_nan is_zero_approx lerp log max min move_toward pow print print_debug printerr push_error push_warning rad_to_deg randf randf_range randi randi_range randomize range round sign sin snapped sqrt str typeof var_to_str weakref"
+        },
+        contains: [
+          hljs.HASH_COMMENT_MODE,
+          {
+            className: "string",
+            variants: [
+              { begin: '"""', end: '"""' },
+              { begin: "'''", end: "'''" },
+              hljs.QUOTE_STRING_MODE,
+              { begin: "'", end: "'" }
+            ]
+          },
+          {
+            className: "number",
+            variants: [
+              { begin: "\\b0x[0-9a-fA-F_]+\\b" },
+              { begin: "\\b0b[01_]+\\b" },
+              { begin: "\\b\\d[\\d_]*\\.?[\\d_]*([eE][+-]?[\\d_]+)?\\b" }
+            ],
+            relevance: 0
+          },
+          {
+            className: "meta",
+            begin: /@[a-zA-Z_]\w*/
+          },
+          {
+            className: "variable",
+            begin: /\$[a-zA-Z_]\w*/
+          },
+          {
+            className: "title",
+            beginKeywords: "func",
+            end: /[:(]/,
+            excludeEnd: true,
+            contains: [
+              { begin: /[a-zA-Z_]\w*/, className: "title" }
+            ]
+          }
+        ]
+      };
+    });
+    hljs.configure({ ignoreUnescapedHTML: true });
+  }
+  </script>
   <script src="js/main.js" defer></script>
 </body>
 </html>

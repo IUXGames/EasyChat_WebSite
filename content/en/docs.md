@@ -76,7 +76,7 @@ Expected addon path: `res://addons/easychat/` (consistent with `plugin.gd` and i
 
 Copy the `easychat` folder into `res://addons/easychat/`. The final path must be:
 
-```
+```plaintext
 res://addons/easychat/plugin.cfg
 res://addons/easychat/plugin.gd
 res://addons/easychat/easychat.gd
@@ -124,7 +124,7 @@ If you want network chat, install and enable **LinkUx** as well. EasyChat expect
 
 ### Registration flow
 
-```
+```plaintext
 _ready() [in-game only]
   └─ EasyChat._register(self)       ← node registers with singleton
         └─ singleton stores node ref, connects its signals
@@ -568,7 +568,7 @@ Default value: `"{sender}: {message}"` → produces `"GreenKnight: Hello!"`
 
 You can customise it freely:
 
-```
+```plaintext
 [{sender}] {message}      →  [GreenKnight] Hello!
 <{sender}> {message}      →  <GreenKnight> Hello!
 {sender} says: {message}  →  GreenKnight says: Hello!
@@ -610,15 +610,110 @@ When the user presses Enter on `/cmd arg1 arg2`:
 
 ---
 
-### Step 1 — Create a `ChatCommand` resource
+### Step 1 — Create a `ChatCommand` resource file
 
-In the **FileSystem** panel:
-1. Right-click on the folder where you want to store commands (e.g. `res://chat/commands/`).
-2. Select **New Resource**.
-3. Type `ChatCommand` in the search box and press Enter.
-4. Name the file (e.g. `cmd_hello.tres`) and save it.
+In the **FileSystem** panel (bottom-left in Godot):
 
-You can also create commands in code (useful for procedurally registered commands):
+1. Navigate to the folder where you want to store commands. It is recommended to create a dedicated folder, for example `res://chat/commands/`.
+2. Right-click inside that folder and select **New Resource**.
+3. A search dialog appears. Type `ChatCommand` and press **Enter** or double-click the result.
+4. A save dialog opens. Give the file a descriptive name such as `cmd_hello.tres` and click **Save**.
+
+The file appears in the FileSystem. Click it once to select it — the **Inspector** panel on the right will show all of its editable properties.
+
+---
+
+### Step 2 — Configure the command properties in the Inspector
+
+With your `cmd_hello.tres` selected, the Inspector shows four fields. Here is what each one does and how to fill it in:
+
+#### `command_name` — The trigger word
+
+| | |
+|---|---|
+| **What it is** | The primary keyword that the user types after `/` to run this command. |
+| **What to type** | A single lowercase word **without** the `/`. Example: `hello` |
+| **How it matches** | Case-insensitive — the user can type `/hello`, `/Hello`, or `/HELLO` and all will match. |
+| **Leave it empty?** | The command will never match and will never appear in autocomplete. Always fill this in. |
+
+```plaintext
+Inspector field → command_name
+Value           → hello
+```
+
+#### `aliases` — Alternate trigger words
+
+| | |
+|---|---|
+| **What it is** | An array of additional keywords that also trigger this command. |
+| **What to type** | Click the array field, press **+** to add items, and type each alternate name. |
+| **How it matches** | Same case-insensitive rule as `command_name`. |
+| **Leave it empty?** | Fine — most commands do not need aliases. |
+| **Example use** | A `teleport` command could have `["tp"]` so `/tp` is a valid shortcut. |
+
+```plaintext
+Inspector field → aliases
+Value           → ["hi", "hey"]
+Effect          → /hi and /hey now also trigger this command
+```
+
+#### `description` — Text shown in the autocomplete panel
+
+| | |
+|---|---|
+| **What it is** | A short label shown next to the command name in the autocomplete dropdown that appears when the user types `/`. |
+| **What to type** | A single short sentence. Example: `Greets everyone in the chat` |
+| **Best practice** | Keep it to one line and mention the arguments if any. Example: `Move player — /teleport <x> <y>` |
+| **Leave it empty?** | The command still works but the autocomplete row shows no description text. |
+
+```plaintext
+Inspector field → description
+Value           → Greets everyone in the chat
+```
+
+This is what the player sees when they type `/he` in the chat field:
+
+```plaintext
+┌─────────────────────────────────────────┐
+│  /hello   Greets everyone in the chat   │
+└─────────────────────────────────────────┘
+```
+
+#### `usage` — Full syntax documentation (for your own help screens)
+
+| | |
+|---|---|
+| **What it is** | A longer string documenting the full command syntax, intended for your own `/help` command or tooltips. |
+| **What to type** | The full command with placeholders. Example: `/hello` or `/teleport <x> <y>` |
+| **Important** | **This field is NOT shown in the autocomplete panel.** Only `description` appears there. |
+| **Leave it empty?** | Fine — it has no effect on autocomplete or execution. |
+| **How to use it** | Read it in your `/help` command handler: `EasyChat.add_system_message(cmd.usage)` |
+
+```plaintext
+Inspector field → usage
+Value           → /hello
+```
+
+---
+
+### Step 3 — Add the command to `EasyChatConfig`
+
+The command resource needs to be registered in the config so the chat node knows about it.
+
+1. In the **FileSystem**, click your `EasyChatConfig.tres` file to select it (or the config you assigned to the EasyChat node).
+2. In the **Inspector**, scroll to the **Commands** group at the bottom.
+3. Click the `commands` array row to expand it.
+4. Click the **Add Element** button (`+`) that appears.
+5. A new empty slot appears. Click the empty slot and either:
+   - Drag your `cmd_hello.tres` from the FileSystem into the slot, **or**
+   - Click the slot's folder icon to open the resource picker, find your file, and confirm.
+6. The command name and description now appear in the slot.
+
+Repeat from step 4 for every additional command. Commands are matched **in order** — if two commands share the same `command_name`, the first one in the array wins.
+
+> **Tip:** You can reorder commands by dragging the rows in the array. The order also determines the order in the autocomplete suggestion list.
+
+You can also create commands in code without `.tres` files (useful for procedurally registered commands at runtime):
 
 ```gdscript
 var cmd = ChatCommand.new()
@@ -626,30 +721,10 @@ cmd.command_name = "hello"
 cmd.aliases = PackedStringArray(["hi", "hey"])
 cmd.description = "Greets everyone"
 cmd.usage = "/hello"
+# Add to config at runtime:
+chat_node.config.commands.append(cmd)
+cmd.executed.connect(_on_hello_executed)
 ```
-
----
-
-### Step 2 — Fill in the command properties
-
-Select your `.tres` file and open the inspector:
-
-- **`command_name`** — The primary trigger. Type `hello` here (no `/`). The match is case-insensitive: the user can type `/Hello`, `/HELLO`, or `/hello` and all will match.
-- **`aliases`** — Optional alternate names. E.g. `["hi", "hey"]` means `/hi` and `/hey` also trigger this command.
-- **`description`** — Short text shown in the autocomplete dropdown. Example: `"Greets everyone in the chat"`. Keep it to one line.
-- **`usage`** — Full syntax documentation for your own help screens. Example: `"/hello"`. **Not shown** in the autocomplete panel.
-
----
-
-### Step 3 — Add the command to `EasyChatConfig`
-
-Open your `EasyChatConfig.tres` in the inspector:
-1. Scroll to the **Commands** group.
-2. Click the `commands` array to expand it.
-3. Click the **+** button to add an element.
-4. Drag your `cmd_hello.tres` into the new array slot (or use the resource picker).
-
-Repeat for every command you want to register. Commands are matched in order, so if two commands share the same name the first one wins.
 
 ---
 
@@ -717,7 +792,7 @@ func _on_ping(args: Array) -> void:
 ```
 
 **In-game usage:**
-```
+```plaintext
 /ping           →  ▶ Pong! Server is reachable.
 /ping anything  →  ▶ Pong! Server is reachable.  (extra args ignored)
 ```
@@ -761,7 +836,7 @@ func _on_teleport(args: Array) -> void:
 ```
 
 **In-game usage:**
-```
+```plaintext
 /teleport 320 200    →  ▶ Teleported to (320, 200)
 /tp 0 0              →  ▶ Teleported to (0, 0)        (alias works!)
 /teleport            →  ▶ Usage: /teleport <x> <y>    (too few args)
@@ -802,7 +877,7 @@ func _on_shout(args: Array) -> void:
 ```
 
 **In-game usage:**
-```
+```plaintext
 /shout                  →  AAAAAA!
 /shout hello world      →  HELLO WORLD!
 /shout the cake is lie  →  THE CAKE IS LIE!
@@ -840,7 +915,7 @@ func _on_kick(args: Array) -> void:
 ```
 
 **In-game usage:**
-```
+```plaintext
 /kick                        →  ▶ Usage: /kick <player> [reason]
 /kick player123              →  ▶ Kicked player123 — Reason: No reason given
 /kick player123 was cheating →  ▶ Kicked player123 — Reason: was cheating
@@ -914,7 +989,7 @@ The node does `get_node_or_null("/root/LinkUx")` and uses the following APIs:
 
 ### Full send flow
 
-```
+```plaintext
 User presses Enter on "Hello!"
         │
         ▼

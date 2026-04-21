@@ -76,7 +76,7 @@ Ruta esperada del addon: `res://addons/easychat/` (coherente con `plugin.gd` y r
 
 Copia la carpeta `easychat` dentro de `res://addons/easychat/`. La ruta final debe ser:
 
-```
+```plaintext
 res://addons/easychat/plugin.cfg
 res://addons/easychat/plugin.gd
 res://addons/easychat/easychat.gd
@@ -124,7 +124,7 @@ Si quieres chat en red, instala y activa también **LinkUx**. EasyChat lo espera
 
 ### Flujo de registro
 
-```
+```plaintext
 _ready() [solo en juego]
   └─ EasyChat._register(self)       ← el nodo se registra en el singleton
         └─ el singleton guarda la referencia y conecta sus señales
@@ -569,7 +569,7 @@ Valor por defecto: `"{sender}: {message}"` → produce `"CaballeroVerde: Hola!"`
 
 Puedes personalizarlo libremente:
 
-```
+```plaintext
 [{sender}] {message}       →  [CaballeroVerde] Hola!
 <{sender}> {message}       →  <CaballeroVerde> Hola!
 {sender} dice: {message}   →  CaballeroVerde dice: Hola!
@@ -611,15 +611,110 @@ Cuando el usuario pulsa Enter en `/cmd arg1 arg2`:
 
 ---
 
-### Paso 1 — Crear un recurso `ChatCommand`
+### Paso 1 — Crear el archivo de recurso `ChatCommand`
 
-En el panel **FileSystem**:
-1. Clic derecho en la carpeta donde quieras guardar los comandos (p. ej. `res://chat/comandos/`).
-2. Selecciona **New Resource**.
-3. Escribe `ChatCommand` en el buscador y pulsa Enter.
-4. Dale un nombre al archivo (p. ej. `cmd_hola.tres`) y guárdalo.
+En el panel **FileSystem** (parte inferior izquierda de Godot):
 
-También puedes crear comandos por código (útil para comandos registrados de forma procedural):
+1. Navega a la carpeta donde quieras guardar los comandos. Se recomienda crear una carpeta dedicada, por ejemplo `res://chat/comandos/`.
+2. Haz clic derecho dentro de esa carpeta y selecciona **New Resource**.
+3. Aparece un diálogo de búsqueda. Escribe `ChatCommand` y pulsa **Enter** o haz doble clic en el resultado.
+4. Se abre el diálogo de guardado. Dale al archivo un nombre descriptivo, por ejemplo `cmd_hola.tres`, y haz clic en **Save**.
+
+El archivo aparece en el FileSystem. Haz clic en él una vez para seleccionarlo — el panel **Inspector** de la derecha mostrará todas sus propiedades editables.
+
+---
+
+### Paso 2 — Configurar las propiedades del comando en el Inspector
+
+Con tu `cmd_hola.tres` seleccionado, el Inspector muestra cuatro campos. Aquí se explica qué hace cada uno y cómo rellenarlo:
+
+#### `command_name` — La palabra clave disparadora
+
+| | |
+|---|---|
+| **Qué es** | La palabra principal que el usuario escribe tras `/` para ejecutar este comando. |
+| **Qué escribir** | Una única palabra en minúsculas **sin** el `/`. Ejemplo: `hola` |
+| **Cómo coincide** | Sin distinción de mayúsculas — el usuario puede escribir `/hola`, `/Hola` o `/HOLA` y todas coinciden. |
+| **¿Dejar vacío?** | El comando nunca coincidirá y no aparecerá en el autocompletado. Rellena siempre este campo. |
+
+```plaintext
+Campo del inspector → command_name
+Valor               → hola
+```
+
+#### `aliases` — Palabras clave alternativas
+
+| | |
+|---|---|
+| **Qué es** | Un array de palabras adicionales que también disparan este comando. |
+| **Qué escribir** | Haz clic en el campo del array, pulsa **+** para añadir elementos y escribe cada nombre alternativo. |
+| **Cómo coincide** | La misma regla sin distinción de mayúsculas que `command_name`. |
+| **¿Dejar vacío?** | Perfectamente válido — la mayoría de comandos no necesitan alias. |
+| **Ejemplo de uso** | Un comando `teletransportar` puede tener `["tp"]` para que `/tp` funcione como atajo. |
+
+```plaintext
+Campo del inspector → aliases
+Valor               → ["hi", "hey"]
+Efecto              → /hi y /hey también disparan este comando
+```
+
+#### `description` — Texto visible en el panel de autocompletado
+
+| | |
+|---|---|
+| **Qué es** | Una etiqueta corta que aparece junto al nombre del comando en el desplegable de autocompletado cuando el usuario escribe `/`. |
+| **Qué escribir** | Una frase corta. Ejemplo: `Saluda a todos en el chat` |
+| **Buena práctica** | Mantenlo en una línea y menciona los argumentos si los tiene. Ejemplo: `Mueve al jugador — /teletransportar <x> <y>` |
+| **¿Dejar vacío?** | El comando sigue funcionando pero la fila del autocompletado no mostrará ningún texto descriptivo. |
+
+```plaintext
+Campo del inspector → description
+Valor               → Saluda a todos en el chat
+```
+
+Esto es lo que ve el jugador cuando escribe `/ho` en el campo de chat:
+
+```plaintext
+┌───────────────────────────────────────────────┐
+│  /hola   Saluda a todos en el chat            │
+└───────────────────────────────────────────────┘
+```
+
+#### `usage` — Documentación de sintaxis completa (para tus propias pantallas de ayuda)
+
+| | |
+|---|---|
+| **Qué es** | Una cadena más larga que documenta la sintaxis completa del comando, pensada para tu propio comando `/ayuda` o tooltips. |
+| **Qué escribir** | El comando completo con marcadores de posición. Ejemplo: `/hola` o `/teletransportar <x> <y>` |
+| **Importante** | **Este campo NO se muestra en el panel de autocompletado.** Solo `description` aparece ahí. |
+| **¿Dejar vacío?** | Perfectamente válido — no tiene ningún efecto en el autocompletado ni en la ejecución. |
+| **Cómo usarlo** | Léelo en tu handler de `/ayuda`: `EasyChat.add_system_message(cmd.usage)` |
+
+```plaintext
+Campo del inspector → usage
+Valor               → /hola
+```
+
+---
+
+### Paso 3 — Añadir el comando a `EasyChatConfig`
+
+El recurso del comando debe registrarse en el config para que el nodo del chat lo conozca.
+
+1. En el **FileSystem**, haz clic en tu archivo `EasyChatConfig.tres` para seleccionarlo (o el config que hayas asignado al nodo EasyChat).
+2. En el **Inspector**, desplázate hasta el grupo **Commands** en la parte inferior.
+3. Haz clic en la fila del array `commands` para expandirla.
+4. Haz clic en el botón **Añadir elemento** (`+`) que aparece.
+5. Aparece un nuevo slot vacío. Haz clic en él y:
+   - Arrastra tu `cmd_hola.tres` desde el FileSystem al slot, **o bien**
+   - Haz clic en el icono de carpeta del slot para abrir el selector de recursos, localiza tu archivo y confirma.
+6. El nombre y la descripción del comando aparecen ahora en el slot.
+
+Repite desde el paso 4 para cada comando adicional. Los comandos se comprueban **en orden** — si dos comandos comparten el mismo `command_name`, gana el primero del array.
+
+> **Consejo:** Puedes reordenar los comandos arrastrando las filas del array. El orden también determina el orden en la lista de sugerencias del autocompletado.
+
+También puedes crear comandos por código sin archivos `.tres` (útil para comandos registrados de forma procedural en tiempo de ejecución):
 
 ```gdscript
 var cmd = ChatCommand.new()
@@ -627,30 +722,10 @@ cmd.command_name = "hola"
 cmd.aliases = PackedStringArray(["hi", "hey"])
 cmd.description = "Saluda a todos"
 cmd.usage = "/hola"
+# Añadir al config en tiempo de ejecución:
+chat_node.config.commands.append(cmd)
+cmd.executed.connect(_on_hola_ejecutado)
 ```
-
----
-
-### Paso 2 — Rellenar las propiedades del comando
-
-Selecciona tu archivo `.tres` y abre el inspector:
-
-- **`command_name`** — El disparador principal. Escribe `hola` aquí (sin `/`). La coincidencia no distingue mayúsculas: el usuario puede escribir `/Hola`, `/HOLA` o `/hola` y todas coincidirán.
-- **`aliases`** — Nombres alternativos opcionales. P. ej. `["hi", "hey"]` hace que `/hi` y `/hey` también disparen este comando.
-- **`description`** — Texto corto que se muestra en el desplegable de autocompletado. Ej: `"Saluda a todos en el chat"`. Mantenlo en una línea.
-- **`usage`** — Sintaxis completa para tus propias pantallas de ayuda. Ej: `"/hola"`. **No se muestra** en el panel de autocompletado.
-
----
-
-### Paso 3 — Añadir el comando a `EasyChatConfig`
-
-Abre tu `EasyChatConfig.tres` en el inspector:
-1. Desplázate hasta el grupo **Commands**.
-2. Haz clic en el array `commands` para expandirlo.
-3. Haz clic en el botón **+** para añadir un elemento.
-4. Arrastra tu `cmd_hola.tres` al nuevo slot (o usa el selector de recursos).
-
-Repite esto para cada comando que quieras registrar. Los comandos se comprueban en orden; si dos tienen el mismo nombre, gana el primero.
 
 ---
 
@@ -718,7 +793,7 @@ func _on_ping(args: Array) -> void:
 ```
 
 **Uso en el juego:**
-```
+```plaintext
 /ping           →  ▶ ¡Pong! El servidor es accesible.
 /ping algo      →  ▶ ¡Pong! El servidor es accesible.  (args ignorados)
 ```
@@ -762,7 +837,7 @@ func _on_teletransportar(args: Array) -> void:
 ```
 
 **Uso en el juego:**
-```
+```plaintext
 /teletransportar 320 200   →  ▶ Teletransportado a (320, 200)
 /tp 0 0                    →  ▶ Teletransportado a (0, 0)       (¡el alias funciona!)
 /teletransportar           →  ▶ Uso: /teletransportar <x> <y>  (pocos argumentos)
@@ -800,7 +875,7 @@ func _on_gritar(args: Array) -> void:
 ```
 
 **Uso en el juego:**
-```
+```plaintext
 /gritar                   →  ▶ ¡AAAAAAAA!
 /gritar hola mundo        →  ▶ HOLA MUNDO!
 /gritar el pastel es mio  →  ▶ EL PASTEL ES MIO!
@@ -838,7 +913,7 @@ func _on_expulsar(args: Array) -> void:
 ```
 
 **Uso en el juego:**
-```
+```plaintext
 /expulsar                        →  ▶ Uso: /expulsar <jugador> [razon]
 /expulsar jugador123             →  ▶ Expulsado jugador123 — Razón: Sin razón especificada
 /expulsar jugador123 hacia trampa →  ▶ Expulsado jugador123 — Razón: hacia trampa
@@ -912,7 +987,7 @@ El nodo hace `get_node_or_null("/root/LinkUx")` y utiliza las siguientes APIs:
 
 ### Flujo completo de envío
 
-```
+```plaintext
 El usuario pulsa Enter en "¡Hola!"
         │
         ▼
