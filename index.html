@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="description" content="EasyChat — Official documentation for the Godot 4 chat & command console addon." />
+  <title>EasyChat — Documentation</title>
+  <link rel="icon" href="assets/icon.svg" type="image/svg+xml" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=JetBrains+Mono:ital,wght@0,400;0,500;1,400&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="css/styles.css" />
+</head>
+<body>
+  <a class="skip-link" href="#main-content" data-i18n="skip">Saltar al contenido</a>
+
+  <header class="site-header" role="banner">
+    <div class="header-inner">
+      <a class="brand" id="brand-link" href="#overview" aria-label="EasyChat documentation home">
+        <img class="brand-icon" src="assets/icon.svg" width="40" height="40" alt="" />
+        <div class="brand-text">
+          <span class="brand-name">EasyChat</span>
+          <span class="brand-tagline" data-i18n="tagline">Documentación oficial</span>
+        </div>
+      </a>
+
+      <div class="header-actions">
+        <button type="button" class="search-trigger" id="search-trigger" data-i18n-aria="search">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+            <circle cx="11" cy="11" r="7" />
+            <path d="M21 21l-4.35-4.35" />
+          </svg>
+          <span class="search-trigger-label" data-i18n="search">Buscar</span>
+          <kbd>Ctrl</kbd><kbd>K</kbd>
+        </button>
+
+        <button type="button" class="btn-icon nav-toggle" id="nav-toggle" aria-expanded="false" aria-controls="sidebar" data-i18n-aria="openMenu" aria-label="Abrir menú">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+            <path d="M4 6h16M4 12h16M4 18h16" />
+          </svg>
+        </button>
+
+        <div class="lang-switch" role="group" aria-label="Language">
+          <span class="lang-switch-label" data-i18n="language">Idioma</span>
+          <button type="button" class="lang-btn" data-lang="es" id="lang-es">ES</button>
+          <button type="button" class="lang-btn" data-lang="en" id="lang-en">EN</button>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <div class="layout">
+    <aside class="sidebar" id="sidebar" aria-label="Documentation navigation">
+      <div class="sidebar-inner">
+        <p class="sidebar-heading" data-i18n="navHeading">Documentación</p>
+        <nav class="nav-groups" id="nav-groups" aria-label="Pages"></nav>
+        <p class="sidebar-heading toc-page" data-i18n="onThisPage">En esta página</p>
+        <nav class="toc" id="toc" aria-label="Page sections"></nav>
+      </div>
+    </aside>
+
+    <div class="backdrop" id="backdrop" hidden></div>
+
+    <main class="main" id="main-content">
+      <article class="doc prose" id="doc-content">
+        <p class="loading" data-i18n="loading">Cargando…</p>
+      </article>
+      <footer class="site-footer">
+        <p><span data-i18n="footerNote">Documentación basada en el código fuente del addon (Godot 4).</span> · EasyChat v1.0.0</p>
+        <p class="serve-hint" data-i18n="serveHint"></p>
+      </footer>
+    </main>
+  </div>
+
+  <div class="search-modal" id="search-modal" role="dialog" aria-modal="true" aria-label="Search" hidden>
+    <div class="search-dialog">
+      <div class="search-dialog-header">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+          <circle cx="11" cy="11" r="7" />
+          <path d="M21 21l-4.35-4.35" />
+        </svg>
+        <input type="search" id="search-input" data-i18n-placeholder="searchPlaceholder" placeholder="" autocomplete="off" />
+      </div>
+      <div class="search-results" id="search-results"></div>
+      <p class="search-hint" data-i18n="searchHint"></p>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <script src="js/main.js" defer></script>
+</body>
+</html>

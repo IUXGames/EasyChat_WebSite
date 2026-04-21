@@ -1,0 +1,58 @@
+{
+  "version": 1,
+  "defaultPage": "overview",
+  "groups": [
+    {
+      "id": "start",
+      "titles": { "es": "Primeros pasos", "en": "Getting started" },
+      "items": [
+        "overview",
+        "features",
+        "requirements",
+        "installation",
+        "architecture",
+        "first-use"
+      ]
+    },
+    {
+      "id": "reference",
+      "titles": { "es": "Referencia de API y recursos", "en": "API & resources" },
+      "items": [
+        "node-easychat",
+        "config-resource",
+        "chatcommand-resource",
+        "singleton",
+        "signals",
+        "keyboard",
+        "messages",
+        "commands"
+      ]
+    },
+    {
+      "id": "multiplayer",
+      "titles": { "es": "Multijugador", "en": "Multiplayer" },
+      "items": ["multiplayer"]
+    },
+    {
+      "id": "experience",
+      "titles": { "es": "Experiencia de uso", "en": "User experience" },
+      "items": [
+        "animations",
+        "notifications",
+        "sounds",
+        "editor-preview"
+      ]
+    },
+    {
+      "id": "advanced",
+      "titles": { "es": "Avanzado y operación", "en": "Advanced & operations" },
+      "items": [
+        "limitations",
+        "scaling",
+        "modifying",
+        "troubleshooting",
+        "credits"
+      ]
+    }
+  ]
+}
