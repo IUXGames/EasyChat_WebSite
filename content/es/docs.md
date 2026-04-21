@@ -7,8 +7,7 @@
 
 **EasyChat** es un addon para **Godot 4** que añade un nodo de interfaz reutilizable para **chat en juego** y **consola de comandos** con autocompletado. Funciona en **modo offline** (un solo jugador o sin sesión de red) y en **multijugador en tiempo real** cuando se combina con el addon **LinkUx**, que abstrae backends LAN u online y mantiene el mismo flujo lógico independientemente del backend activo.
 
-
-Este documento describe **todas** las piezas del addon, sus propiedades exportadas, la API del singleton, el comportamiento en runtime y orientación para **escalar** el sistema o **modificarlo** por dentro.
+Este documento describe **todas** las piezas del addon: propiedades exportadas, la API del singleton, el sistema de comandos con guías paso a paso y ejemplos de código, comportamiento en runtime y orientación para **escalar** el sistema o **modificarlo** internamente.
 
 ---
 
@@ -45,14 +44,14 @@ Este documento describe **todas** las piezas del addon, sus propiedades exportad
 ## Características
 
 - **Nodo personalizado** registrado en el editor como tipo **EasyChat** (hereda de `Control`), con icono propio.
-- **Singleton `EasyChat`** registrado automáticamente al activar el plugin; API global para abrir/cerrar, mensajes y nombre de jugador.
-- **Recurso `EasyChatConfig`**: apariencia (paneles, bordes, radios, colores, fuentes), comportamiento (cierre al enviar, límites de historial, notificaciones), animaciones, layout, sonidos y lista de comandos.
-- **Recurso `ChatCommand`**: nombre, alias, descripción, uso documental y señal `executed(args)`.
-- **Historial** con límite configurable; los mensajes más antiguos se eliminan al superar el máximo.
-- **Chat cerrado** sin bloquear el juego: el nodo raíz usa `mouse_filter = IGNORE` y solo al abrir el chat se fuerza el cursor visible y se liberan acciones de `InputMap`.
-- **Autocompletado** de comandos al escribir `/`, con navegación por teclado y clic.
-- **Notificación** breve cuando llega un mensaje con el panel cerrado (o al enviar con `close_on_send`), con cantidad simultánea y animación de entrada configurables.
-- **Multijugador opcional** vía **LinkUx**: registro de RPC, broadcast al enviar, nombre local desde `LinkUx.get_local_player_name()`, visibilidad ligada a sesión y cierre forzado al cerrar sesión.
+- **Singleton `EasyChat`** registrado automáticamente al activar el plugin; API global para abrir/cerrar, inyectar mensajes y establecer el nombre de jugador desde cualquier script.
+- **Recurso `EasyChatConfig`**: apariencia (paneles, bordes, radios, colores, fuentes), comportamiento (cierre al enviar, límite de historial, notificaciones), animaciones, layout, sonidos y lista de comandos — todo en un único archivo `.tres` reutilizable entre escenas.
+- **Recurso `ChatCommand`**: nombre, alias, descripción, documentación de uso y señal `executed(args)`. Conecta la señal desde cualquier script de tu proyecto.
+- **Historial** con límite configurable; los mensajes más antiguos se eliminan automáticamente al superar el máximo.
+- **Overlay no bloqueante**: el nodo raíz usa `mouse_filter = IGNORE` y nunca absorbe clics del juego; solo al abrir el chat se fuerza el cursor visible y se liberan acciones del `InputMap`.
+- **Autocompletado** de comandos al escribir `/`, con navegación por teclado (↑↓ Tab) y clic de ratón.
+- **Notificaciones flotantes** cuando llega un mensaje con el panel cerrado (o al enviar con `close_on_send`), con cantidad simultánea, duración y animación de entrada configurables.
+- **Multijugador opcional** vía **LinkUx**: registro de RPC, broadcast al enviar, nombre local desde `LinkUx.get_local_player_name()`, visibilidad ligada al estado de sesión y cierre forzado al terminar la sesión.
 
 ---
 
@@ -61,11 +60,11 @@ Este documento describe **todas** las piezas del addon, sus propiedades exportad
 ## Requisitos y dependencias
 
 | Componente | Obligatorio | Notas |
-|------------|-------------|--------|
-| **Godot 4.x** | Sí | El código usa sintaxis y APIs de Godot 4 (por ejemplo `@export`, señales tipadas, `Tween`, etc.). |
-| **LinkUx** | No | Solo necesario si `multiplayer_enabled` está activo en el nodo y se desea chat en red en tiempo real. Debe existir el autoload **`/root/LinkUx`**. |
+|------------|-------------|-------|
+| **Godot 4.x** | Sí | El código usa sintaxis y APIs de Godot 4 (`@export`, señales tipadas, `Tween`, etc.). |
+| **LinkUx** | No | Solo necesario si `multiplayer_enabled` está activo en el nodo y se desea chat en red en tiempo real. El autoload **`/root/LinkUx`** debe existir. |
 
-Ruta esperada del addon en el proyecto: `res://addons/easychat/` (coherente con `plugin.gd` y rutas `preload`).
+Ruta esperada del addon: `res://addons/easychat/` (coherente con `plugin.gd` y rutas `preload` internas).
 
 ---
 
@@ -73,14 +72,39 @@ Ruta esperada del addon en el proyecto: `res://addons/easychat/` (coherente con 
 
 ## Instalación
 
-1. Copia la carpeta del addon dentro de `res://addons/easychat/`.
-2. Abre el proyecto en Godot 4.
-3. Ve a **Project → Project Settings → Plugins** y activa **EasyChat**.
-4. Al activar el plugin:
-   - Se añade el autoload **`EasyChat`** apuntando a `res://addons/easychat/easychat.gd`.
-   - Se registra el tipo de nodo personalizado **EasyChat** en el diálogo de crear nodos.
-5. (Opcional para multijugador) Instala y configura **LinkUx** como autoload con el nombre que exponga ese addon (el código de EasyChat busca `/root/LinkUx`).
-6. Añade un nodo **EasyChat** a la escena donde quieras el chat (típicamente un `CanvasLayer` o la raíz UI de la partida).
+### Paso 1 — Copiar el addon
+
+Copia la carpeta `easychat` dentro de `res://addons/easychat/`. La ruta final debe ser:
+
+```
+res://addons/easychat/plugin.cfg
+res://addons/easychat/plugin.gd
+res://addons/easychat/easychat.gd
+res://addons/easychat/easychat_node.gd
+res://addons/easychat/easychat_config.gd
+res://addons/easychat/chat_command.gd
+```
+
+### Paso 2 — Activar el plugin
+
+Abre el proyecto en Godot 4, ve a **Project → Project Settings → Plugins**, localiza **EasyChat** en la lista y haz clic en **Enable**.
+
+Al activarse el plugin:
+- Se registra el autoload **`EasyChat`** (singleton) apuntando a `res://addons/easychat/easychat.gd`.
+- Se registra el tipo de nodo personalizado **EasyChat** en el diálogo de añadir nodos (bajo `Control`).
+
+### Paso 3 — Añadir el nodo a una escena
+
+1. Abre la escena donde quieras el chat (p. ej. `main.tscn` o una escena de HUD dedicada).
+2. Añade un nodo **`CanvasLayer`** como hijo de tu raíz (recomendado para que el chat siempre se renderice encima).
+3. Dentro del `CanvasLayer`, añade un nodo **EasyChat**. Lo encontrarás en el buscador de nodos bajo **Control → EasyChat**.
+
+### Paso 4 — (Opcional) Instalar LinkUx para multijugador
+
+Si quieres chat en red, instala y activa también **LinkUx**. EasyChat lo espera en `/root/LinkUx`. Una vez instalado:
+
+1. En el inspector del nodo **EasyChat**, activa `multiplayer_enabled`.
+2. Inicia una sesión a través de LinkUx; EasyChat registrará automáticamente el RPC y empezará a hacer broadcast de mensajes.
 
 ---
 
@@ -92,15 +116,26 @@ Ruta esperada del addon en el proyecto: `res://addons/easychat/` (coherente con 
 |---------|-----|
 | `plugin.cfg` | Metadatos del plugin (nombre, versión, script del plugin). |
 | `plugin.gd` | `EditorPlugin`: al habilitar/deshabilitar gestiona el autoload; al entrar/salir del árbol del editor registra el tipo **EasyChat**. |
-| `easychat.gd` | Singleton **EasyChat**: delega en la instancia activa del nodo. |
-| `easychat_node.gd` | Nodo **EasyChat**: UI, input, comandos, animaciones, integración LinkUx. |
-| `easychat_config.gd` | `class_name EasyChatConfig` — recurso de configuración. |
-| `chat_command.gd` | `class_name ChatCommand` — recurso por comando. |
+| `easychat.gd` | Singleton **EasyChat**: fachada que delega cada llamada en la instancia activa del nodo. |
+| `easychat_node.gd` | Nodo **EasyChat**: construye toda la UI por código, gestiona input, comandos, animaciones, notificaciones, sonidos e integración con LinkUx. |
+| `easychat_config.gd` | `class_name EasyChatConfig` — recurso de configuración con todos los ajustes visuales y de comportamiento. |
+| `chat_command.gd` | `class_name ChatCommand` — recurso por comando con señal `executed(args)`. |
 | `icon.svg` | Icono del nodo y del script en el editor. |
 
-**Flujo de registro:** en `_ready()` del nodo (solo en juego, no en el editor), el nodo llama a `EasyChat._register(self)` si existe `/root/EasyChat`. Al salir del árbol, llama a `_unregister`. Solo puede haber **una** instancia “activa” por escena a la que el singleton delega; una segunda emite advertencia y se ignora.
+### Flujo de registro
 
-**Grupo:** el nodo se añade al grupo `"easychat"` (útil para búsquedas o herramientas).
+```
+_ready() [solo en juego]
+  └─ EasyChat._register(self)       ← el nodo se registra en el singleton
+        └─ el singleton guarda la referencia y conecta sus señales
+
+_exit_tree()
+  └─ EasyChat._unregister(self)     ← el nodo se desregistra
+```
+
+Solo puede haber **una** instancia EasyChat activa por escena a la que el singleton delega. Una segunda instancia genera **warning** y es ignorada por el singleton (ambos nodos siguen funcionando de forma independiente, pero solo el primero en registrarse controla `EasyChat.*`).
+
+El nodo también se añade al grupo `"easychat"`, útil para búsquedas o herramientas: `get_tree().get_nodes_in_group("easychat")`.
 
 ---
 
@@ -110,38 +145,42 @@ Ruta esperada del addon en el proyecto: `res://addons/easychat/` (coherente con 
 
 ### Solo offline / sin LinkUx
 
-1. Activa el plugin **EasyChat** (ver [Instalación](#instalación)).
-2. En tu escena de juego (por ejemplo `main.tscn`), añade un nodo **EasyChat** como hijo de un `CanvasLayer` o contenedor a pantalla completa.
-3. Deja **`multiplayer_enabled`** en `false` (valor por defecto).
-4. Ejecuta la escena: pulsa la tecla **Abrir chat** (por defecto `T`) para abrir; **Escape** para cerrar (o cerrar la lista de sugerencias si está abierta).
-5. Escribe texto y pulsa **Enter** o el botón de enviar (si está visible) para enviar un mensaje de chat.
-6. Para comandos, escribe `/nombrecomando` seguido de argumentos separados por espacio.
+1. Activa el plugin **EasyChat** (ver [Instalación](#installation)).
+2. Añade un `CanvasLayer` a tu escena de juego y, dentro de él, un nodo **EasyChat**.
+3. Deja `multiplayer_enabled` en `false` (valor por defecto).
+4. Ejecuta la escena. Pulsa **T** (la `open_key` por defecto) para abrir el chat; **Escape** para cerrarlo.
+5. Escribe cualquier texto y pulsa **Enter** o el botón de enviar para publicar un mensaje.
+6. Para comandos, escribe `/` seguido del nombre del comando y argumentos opcionales.
 
-### Con nombre de jugador local (offline)
+### Asignar el nombre del jugador local
 
-- En código, tras tener el nodo en escena: `EasyChat.set_player_name("TuNick")`.
-- Ese nombre es el que sustituye `{sender}` en los mensajes que envías en modo no multijugador (o cuando LinkUx no actualiza el nombre).
+Antes o después de que el nodo entre en el árbol de escena:
 
-### Con multijugador (LinkUx)
+```gdscript
+func _ready() -> void:
+    EasyChat.set_player_name("CaballeroVerde")
+```
 
-1. Instala y registra **LinkUx** como autoload (`/root/LinkUx` debe resolverse).
-2. En el nodo **EasyChat**, activa **`multiplayer_enabled`**.
-3. Asegúrate de iniciar sesión con LinkUx según la documentación de ese addon; EasyChat registrará el RPC cuando la sesión esté activa y usará `get_local_player_name()` para el remitente.
-4. Los mensajes de texto (no comandos) se **difunden** por red; el remitente local también ve su mensaje en el historial.
+Este nombre sustituye `{sender}` en el formato de mensaje al enviar. En multijugador se sobreescribe por `LinkUx.get_local_player_name()` cuando esté disponible.
 
-### Recurso de configuración compartida
+### Usar un recurso de configuración compartido
 
-1. En el FileSystem, crea un recurso **EasyChatConfig** (`.tres`) o duplica uno existente.
-2. Ajusta apariencia, sonidos, comandos, etc.
-3. Asigna ese recurso al campo **`config`** del nodo **EasyChat** en el inspector.
-4. Reutiliza el mismo `.tres` en otras escenas para un estilo coherente.
+1. En el panel **FileSystem**: clic derecho → **New Resource** → busca `EasyChatConfig` → guarda como p. ej. `res://ui/chat_config.tres`.
+2. Ajusta colores, fuentes, animaciones, sonidos y comandos en el inspector.
+3. En el inspector del nodo **EasyChat**, arrastra tu `.tres` al campo **Config**.
+4. Reutiliza el mismo `.tres` en otras escenas (lobby, partida, etc.) para un estilo coherente.
 
-### Definir comandos
+Si no se asigna ningún config en runtime, el nodo crea automáticamente `EasyChatConfig.new()` con valores por defecto.
 
-1. Crea uno o más recursos **ChatCommand** (`.tres`).
-2. Rellena **`command_name`**, opcionalmente **`aliases`**, **`description`** (visible en autocompletado) y **`usage`** (referencia para documentación; la UI del autocompletado muestra la descripción, no el uso).
-3. Añade esos recursos al array **`commands`** dentro de tu **EasyChatConfig** (o del config por defecto si no usas `.tres` externo).
-4. En tu lógica de juego, conecta `command.executed.connect(_on_my_command)` para cada recurso (o conecta en un script que cargue la misma referencia al `.tres`).
+### Multijugador (LinkUx)
+
+1. Instala **LinkUx** y verifica que esté registrado como autoload en `/root/LinkUx`.
+2. En el nodo **EasyChat** activa `multiplayer_enabled = true`.
+3. Inicia una sesión con LinkUx (consulta la documentación de ese addon). EasyChat hará lo siguiente al iniciarse la sesión:
+   - Registrará dos RPCs: `easychat_message` (chat de jugadores) y `easychat_system` (mensajes de sistema).
+   - Usará `LinkUx.get_local_player_name()` como nombre del remitente.
+   - Hará broadcast de cada mensaje no-comando a todos los peers.
+   - Forzará el cierre del chat y limpiará el estado cuando la sesión termine.
 
 ---
 
@@ -149,42 +188,47 @@ Ruta esperada del addon en el proyecto: `res://addons/easychat/` (coherente con 
 
 ## Nodo `EasyChat` (Control)
 
-El nodo es un `Control` a **pantalla completa** (`PRESET_FULL_RECT`): ancla el layout del chat en la parte inferior de la vista. En `_ready()` del juego crea toda la UI por código (historial, scroll, lista de mensajes, panel de autocompletado, notificación, fila de entrada, reproductor de audio).
+Este es el **nodo principal** que añades a tu escena. Construye toda la UI del chat de forma programática dentro de un `Control` a pantalla completa anclado con `PRESET_FULL_RECT`. El layout del chat se posiciona en la esquina inferior-izquierda del viewport usando los offsets de `EasyChatConfig`.
 
 ### Propiedades exportadas (inspector)
 
-#### `config` — `EasyChatConfig` (opcional)
+#### `config` — `EasyChatConfig`
 
-- Recurso con **toda** la personalización visual y de comportamiento.
-- Si está vacío en runtime, el nodo crea `EasyChatConfig.new()` con valores por defecto.
-- En **editor**, al asignar o cambiar el recurso, se reconecta la señal `changed` del recurso para refrescar la vista previa.
+Recurso con toda la personalización visual y de comportamiento. Si se deja vacío en runtime, el nodo crea `EasyChatConfig.new()` con valores por defecto. En el editor, al asignar o cambiar el recurso se reconecta `config.changed` para refrescar la vista previa en tiempo real.
 
-#### Grupo **Multiplayer**
+#### Grupo Multiplayer
 
 | Propiedad | Tipo | Por defecto | Descripción |
 |-----------|------|-------------|-------------|
-| `multiplayer_enabled` | `bool` | `false` | Si es `true`, el chat usa **LinkUx** para RPC y nombre de jugador. Si LinkUx no está disponible, se registra un **error** en consola y el comportamiento de red no está activo. |
+| `multiplayer_enabled` | `bool` | `false` | Activa la integración con LinkUx. Si LinkUx no está disponible, se registra un **error** en consola y el comportamiento de red queda inactivo. |
 
-#### Grupo **Controls**
+#### Grupo Controls
 
 | Propiedad | Tipo | Por defecto | Descripción |
 |-----------|------|-------------|-------------|
-| `open_key` | `Key` | `KEY_T` | Tecla para **abrir** el chat (procesada en `_unhandled_key_input` cuando el chat está cerrado). Sustituye el token `{key}` en el placeholder del campo de texto. |
-| `close_key` | `Key` | `KEY_ESCAPE` | Con el chat **abierto**: cierra el panel de sugerencias si está visible; si no, **cierra** el chat. Procesada en `_input` para poder consumir el evento antes que el resto. |
+| `open_key` | `Key` | `KEY_T` | Tecla para **abrir** el chat (procesada en `_unhandled_key_input` cuando el chat está cerrado y habilitado). Sustituye el token `{key}` en el texto placeholder del campo de entrada. |
+| `close_key` | `Key` | `KEY_ESCAPE` | Con el chat **abierto**: cierra primero el panel de sugerencias si está visible, luego cierra el chat. Procesada en `_input` para consumir el evento antes que el resto. |
 
-### API pública del nodo (runtime)
+### API pública del nodo
 
-Métodos pensados para uso directo en scripts que tengan referencia al nodo:
+Disponible cuando tienes una referencia directa al nodo EasyChat. La mayoría del tiempo usarás el **singleton** en su lugar.
 
 | Método | Comportamiento |
 |--------|----------------|
-| `is_open() -> bool` | `true` si el jugador tiene el chat abierto (panel de historial/animación activa). |
-| `enable()` | Marca el chat como habilitado y actualiza visibilidad (`visible = true` según estado interno). |
-| `disable()` | Si estaba abierto, fuerza cierre; limpia historial; deshabilita y oculta el nodo. |
-| `clear_history()` | Elimina todos los hijos de la lista de mensajes. |
-| `set_player_name(name: String)` | Asigna el nombre del jugador local usado como remitente cuando corresponde. |
+| `is_open() -> bool` | `true` si el panel de historial está abierto o siendo animado. |
+| `enable()` | Marca el chat como habilitado y lo muestra según las reglas de visibilidad internas. |
+| `disable()` | Fuerza el cierre si estaba abierto, limpia el historial, luego deshabilita y oculta el nodo. |
+| `clear_history()` | Elimina inmediatamente todos los labels de mensajes de la lista del historial. |
+| `set_player_name(name: String)` | Establece el nombre del jugador local usado como remitente. |
 
-**Nota:** La mayor parte del juego consumirá la API del **singleton** `EasyChat`, que delega en esta instancia si está registrada.
+```gdscript
+# Ejemplo: habilitar/deshabilitar el chat según el estado del juego
+func _on_game_started() -> void:
+    EasyChat.enable()
+
+func _on_game_paused() -> void:
+    EasyChat.disable()
+```
 
 ---
 
@@ -192,155 +236,153 @@ Métodos pensados para uso directo en scripts que tengan referencia al nodo:
 
 ## Recurso `EasyChatConfig`
 
-`class_name EasyChatConfig` extiende `Resource`. Agrupa todas las opciones del inspector en bloques `@export_group` / `@export_subgroup`.
+`class_name EasyChatConfig extends Resource`. Agrupa todas las opciones en bloques `@export_group` / `@export_subgroup`.
 
 ### Enumeración `AnimType`
 
-Usada para animar el **panel de historial** y la **fila de entrada**.
+Controla cómo animan el **panel de historial**, la **fila de entrada** y las **notificaciones**.
 
 | Valor | Significado |
 |-------|-------------|
 | `NONE` | Mostrar/ocultar al instante (sin transición). |
-| `FADE` | Fundido con opacidad (`modulate.a`). Para la fila de entrada cerrada, puede quedar una opacidad residual (`alpha_input_closed`). |
-| `SLIDE_UP` | Entra desde abajo (offset Y positivo); al cerrar sale hacia abajo. |
-| `SLIDE_DOWN` | Entra desde arriba; al cerrar sale hacia arriba. |
+| `FADE` | Fundido con `modulate.a`. La fila de entrada mantiene opacidad `alpha_input_closed` al cerrar. |
+| `SLIDE_UP` | El historial entra desde abajo; al cerrar sale hacia abajo. |
+| `SLIDE_DOWN` | El historial entra desde arriba; al cerrar sale hacia arriba. |
 | `SLIDE_LEFT` | Entra desde la izquierda; al cerrar sale a la izquierda. |
 | `SLIDE_RIGHT` | Entra desde la derecha; al cerrar sale a la derecha. |
-| `SCALE` | Escala vertical desde casi cero hasta 1 con pivote en el borde inferior del control; easing `BACK` al mostrar, `CUBIC` al ocultar. |
+| `SCALE` | Escala vertical desde casi cero hasta 1, pivote en el borde inferior. Easing `BACK` al aparecer, `CUBIC` al ocultar. |
 
-Distancias de slide y escala usan `panel_height` para el historial e `input_height` para la fila de entrada.
+Las distancias de slide y escala usan `panel_height` para el historial e `input_height` para la fila de entrada.
 
-### Grupo **Appearance**
+### Grupo Appearance
 
-#### Subgrupo **History** (panel de mensajes)
+#### Subgrupo History (panel de mensajes)
 
-| Propiedad | Tipo | Por defecto (resumen) | Uso |
-|-----------|------|------------------------|-----|
+| Propiedad | Tipo | Por defecto | Uso |
+|-----------|------|-------------|-----|
 | `history_bg_color` | `Color` | Oscuro semitransparente | Fondo del panel. |
-| `history_corner_tl`, `history_corner_tr`, `history_corner_bl`, `history_corner_br` | `int` | 6, 6, 0, 0 | Radio de esquinas en píxeles. |
-| `history_border_*` | `int` | 0 | Grosor de borde por lado; 0 lo desactiva. |
-| `history_border_color` | `Color` | Gris semitransparente | Color del borde si algún grosor > 0. |
+| `history_corner_tl/tr/bl/br` | `int` | 6, 6, 0, 0 | Radios de esquina en píxeles. |
+| `history_border_*` | `int` | 0 | Grosor del borde por lado; 0 = desactivado. |
+| `history_border_color` | `Color` | Gris semitransparente | Color del borde cuando algún grosor > 0. |
 
-#### Subgrupo **Autocomplete**
+#### Subgrupo Autocomplete
 
 | Propiedad | Tipo | Uso |
 |-----------|------|-----|
 | `autocomplete_bg_color` | `Color` | Fondo del panel de sugerencias. |
-| `autocomplete_selected_color` | `Color` | Fondo de la fila resaltada (teclado o hover). |
-| `autocomplete_command_color` | `Color` | Texto del nombre `/comando`. |
-| `autocomplete_desc_color` | `Color` | Texto de la descripción. |
-| `autocomplete_font_size` | `int` | Tamaño de fuente en la lista. |
+| `autocomplete_selected_color` | `Color` | Fila resaltada (selección de teclado o hover). |
+| `autocomplete_command_color` | `Color` | Color del texto del nombre `/comando`. |
+| `autocomplete_desc_color` | `Color` | Color del texto de la descripción. |
+| `autocomplete_font_size` | `int` | Tamaño de fuente en la lista de sugerencias. |
 | `autocomplete_font` | `Font` | Fuente personalizada opcional para comando y descripción. |
-| `autocomplete_corner_*` | `int` | Radios de esquina del panel. |
-| `autocomplete_border_*` | `int` | Bordes por lado. |
+| `autocomplete_corner_*` | `int` | Radios del panel. |
+| `autocomplete_border_*` | `int` | Grosor del borde por lado. |
 | `autocomplete_border_color` | `Color` | Color del borde. |
 
-#### Subgrupo **Input** (`LineEdit`)
+#### Subgrupo Input (`LineEdit`)
 
 | Propiedad | Tipo | Uso |
 |-----------|------|-----|
 | `input_bg_color`, `input_focus_color` | `Color` | Fondo normal y con foco. |
 | `input_border_color`, `input_focus_border_color` | `Color` | Borde normal y con foco. |
-| `input_corner_*` | `int` | Radios (por defecto inferiores redondeados). |
-| `input_border_*` | `int` | Grosor por lado. |
+| `input_corner_*` | `int` | Radios de esquina (por defecto inferiores redondeados). |
+| `input_border_*` | `int` | Grosor del borde por lado. |
 | `input_font_size` | `int` | Tamaño del texto escrito. |
 | `input_font` | `Font` | Fuente personalizada opcional para texto y placeholder. |
-| `input_caret_color` | `Color` | Color del cursor. |
-| `input_placeholder_color` | `Color` | Placeholder. |
-| `input_placeholder_text` | `String` | Texto con token `{key}` reemplazado por el nombre de tecla de `open_key`. |
+| `input_caret_color` | `Color` | Color del cursor de texto. |
+| `input_placeholder_color` | `Color` | Color del texto placeholder. |
+| `input_placeholder_text` | `String` | Texto placeholder; `{key}` se reemplaza por el nombre de visualización de `open_key`. |
 
-#### Subgrupo **Send Button**
+#### Subgrupo Send Button
 
 | Propiedad | Tipo | Uso |
 |-----------|------|-----|
-| `send_button_text` | `String` | Etiqueta (por defecto símbolo de retorno). |
-| `send_button_bg_color`, `send_button_hover_color` | `Color` | Estados normal y hover/pulsado. |
-| `send_button_text_color` | `Color` | Color del texto. |
+| `send_button_text` | `String` | Etiqueta del botón (por defecto símbolo `↵`). |
+| `send_button_bg_color`, `send_button_hover_color` | `Color` | Fondo normal y hover/pulsado. |
+| `send_button_text_color` | `Color` | Color del texto del botón. |
 | `send_button_font_size` | `int` | Tamaño de fuente. |
 | `send_button_font` | `Font` | Fuente personalizada opcional para la etiqueta del botón. |
 | `send_corner_*` | `int` | Radios del botón. |
-| `send_border_*` | `int` | Bordes. |
+| `send_border_*` | `int` | Grosor del borde por lado. |
 | `send_border_color`, `send_border_hover_color` | `Color` | Borde normal y hover/pulsado. |
 
-#### Subgrupo **Messages** (historial)
+#### Subgrupo Messages (historial)
 
 | Propiedad | Tipo | Uso |
 |-----------|------|-----|
-| `message_font_size` | `int` | Tamaño para mensajes de jugador y sistema. |
+| `message_font_size` | `int` | Tamaño para todos los mensajes del historial. |
 | `message_font` | `Font` | Fuente personalizada opcional para mensajes del historial. |
-| `message_format` | `String` | Plantilla con `{sender}` y `{message}`. |
-| `local_message_color` | `Color` | Mensajes del jugador local (`is_local == true`). |
-| `remote_message_color` | `Color` | Mensajes de otros o línea recibida por red. |
-| `system_message_color` | `Color` | Mensajes de sistema. |
-| `system_message_prefix` | `String` | Prefijo ante el texto (por defecto `▶ `). |
+| `message_format` | `String` | Plantilla de texto con los tokens `{sender}` y `{message}`. Por defecto: `"{sender}: {message}"`. |
+| `local_message_color` | `Color` | Color de los mensajes enviados por el jugador local. |
+| `remote_message_color` | `Color` | Color de los mensajes de otros jugadores o inyectados con `add_message()`. |
+| `system_message_color` | `Color` | Color de los mensajes de sistema. |
+| `system_message_prefix` | `String` | Prefijo ante cada mensaje de sistema (por defecto `▶ `). |
 
-#### Subgrupo **Notification**
+#### Subgrupo Notification
 
 | Propiedad | Tipo | Uso |
 |-----------|------|-----|
-| `notification_color` | `Color` | Color del texto flotante. |
-| `notification_bg_color` | `Color` | Fondo del panel (alfa 0 lo hace invisible). |
-| `notification_corner_*` | `int` | Radios. |
-| `notification_border_*` | `int` | Bordes. |
+| `notification_color` | `Color` | Color del texto de la notificación flotante. |
+| `notification_bg_color` | `Color` | Fondo del panel (alfa 0 = fondo invisible). |
+| `notification_corner_*` | `int` | Radios de esquina. |
+| `notification_border_*` | `int` | Grosor del borde por lado. |
 | `notification_border_color` | `Color` | Color del borde. |
 | `notification_font_size` | `int` | Tamaño del texto. |
-| `notification_font` | `Font` | Fuente personalizada opcional para el texto flotante. |
+| `notification_font` | `Font` | Fuente personalizada opcional para el texto de notificación. |
 
-### Grupo **Behavior**
+### Grupo Behavior
 
 | Propiedad | Tipo | Por defecto | Descripción |
 |-----------|------|-------------|-------------|
 | `show_send_button` | `bool` | `true` | Muestra u oculta el botón de enviar. |
-| `close_on_send` | `bool` | `false` | Tras enviar mensaje **o** ejecutar comando, cierra el chat; el último mensaje enviado puede mostrarse en la notificación. |
-| `alpha_input_closed` | `float` | `0.35` | Opacidad de la fila de entrada con chat cerrado si la animación es `FADE` o `NONE`. |
-| `notification_alpha` | `float` | `0.75` | Opacidad máxima del panel de notificación durante el fade in. |
-| `notification_duration` | `float` | `3.0` | Segundos visibles antes del fade out. |
-| `max_messages` | `int` | `100` | Máximo de líneas en historial; al superarse se elimina el mensaje más antiguo. |
-| `max_suggestions_visible` | `int` | `6` | Máximo de filas de autocompletado visibles (el resto hace scroll en el panel). |
-| `max_notifications` | `int` | `3` | Máximo de notificaciones flotantes simultáneas; al superarse se elimina primero la más antigua. |
+| `close_on_send` | `bool` | `false` | Cierra el chat después de enviar un mensaje **o** ejecutar un comando. El último mensaje puede aparecer brevemente como notificación. |
+| `alpha_input_closed` | `float` | `0.35` | Opacidad de la fila de entrada con el chat cerrado si la animación es `FADE` o `NONE`. Pon `0.0` para ocultarla por completo. |
+| `notification_alpha` | `float` | `0.75` | Opacidad máxima alcanzada durante el fade-in de una notificación. |
+| `notification_duration` | `float` | `3.0` | Segundos que una notificación permanece completamente visible antes de hacer fade-out. |
+| `max_messages` | `int` | `100` | Máximo de líneas en el historial; el mensaje más antiguo se elimina al superarse el límite. |
+| `max_suggestions_visible` | `int` | `6` | Máximo de filas de autocompletado visibles a la vez (el resto hace scroll). |
+| `max_notifications` | `int` | `3` | Máximo de notificaciones flotantes en pantalla a la vez; la más antigua se elimina al superarse. |
 
-### Grupo **Animations**
+### Grupo Animations
 
-#### Subgrupo **History Panel**
+#### Subgrupo History Panel
 
 | Propiedad | Tipo | Por defecto |
 |-----------|------|-------------|
 | `history_anim_type` | `AnimType` | `FADE` |
 | `history_anim_duration` | `float` | `0.18` s |
 
-#### Subgrupo **Input Row**
+#### Subgrupo Input Row
 
 | Propiedad | Tipo | Por defecto |
 |-----------|------|-------------|
 | `input_anim_type` | `AnimType` | `FADE` |
 | `input_anim_duration` | `float` | `0.18` s |
 
-Para tipos **SLIDE** y **SCALE**, con el chat cerrado la fila de entrada queda **totalmente oculta** (no solo atenuada).
+Con los tipos **SLIDE** o **SCALE**, la fila de entrada queda **completamente oculta** cuando el chat está cerrado (no solo atenuada a `alpha_input_closed`).
 
-#### Subgrupo **Notification**
+#### Subgrupo Notification
 
 | Propiedad | Tipo | Por defecto |
 |-----------|------|-------------|
 | `notification_anim_type` | `AnimType` | `FADE` |
 | `notification_anim_duration` | `float` | `0.15` s |
 
-### Grupo **Layout**
+### Grupo Layout
 
 | Propiedad | Tipo | Por defecto | Descripción |
 |-----------|------|-------------|-------------|
-| `panel_width` | `float` | `415` | Ancho del bloque de chat (historial + entrada alineados). |
-| `panel_height` | `float` | `206` | Alto del área de historial. |
-| `input_height` | `float` | `42` | Alto de la fila de entrada (y referencia de slide/scale para esa fila). |
-| `send_button_width` | `float` | `52` | Ancho mínimo del botón enviar. |
-| `panel_margin_left` | `float` | `10` | Margen izquierdo respecto al viewport. |
-| `panel_margin_bottom` | `float` | `10` | Margen inferior. |
-| `suggestion_item_height` | `float` | `28` | Alto de cada fila en autocompletado. |
+| `panel_width` | `float` | `415` px | Ancho de todo el bloque del chat. |
+| `panel_height` | `float` | `206` px | Alto del área de historial de mensajes. |
+| `input_height` | `float` | `42` px | Alto de la fila de entrada (también referencia de slide/scale para esa fila). |
+| `send_button_width` | `float` | `52` px | Ancho mínimo del botón de enviar. |
+| `panel_margin_left` | `float` | `10` px | Distancia al borde izquierdo del viewport. |
+| `panel_margin_bottom` | `float` | `10` px | Distancia al borde inferior del viewport. |
+| `suggestion_item_height` | `float` | `28` px | Alto de cada fila de sugerencia en el autocompletado. |
 
-Los offsets del panel de **notificación** en código están fijados en parte con constantes (por ejemplo separación respecto a la fila de entrada); si necesitas más control, ver [Modificar el addon internamente](#modificar-el-addon-internamente).
+### Grupo Sounds
 
-### Grupo **Sounds**
-
-Todos son `AudioStream` opcionales (`null` = silencio).
+Todas las propiedades son `AudioStream` opcionales (`null` = silencio).
 
 | Propiedad | Cuándo se reproduce |
 |-----------|---------------------|
@@ -350,13 +392,13 @@ Todos son `AudioStream` opcionales (`null` = silencio).
 | `sound_chat_opened` | Se abre el chat. |
 | `sound_chat_closed` | Se cierra el chat. |
 
-La reproducción usa un único `AudioStreamPlayer` hijo del nodo (un sonido puede interrumpir al anterior).
+La reproducción usa un único `AudioStreamPlayer` hijo del nodo; un sonido nuevo interrumpe al anterior si todavía está sonando.
 
-### Grupo **Commands**
+### Grupo Commands
 
 | Propiedad | Tipo | Descripción |
 |-----------|------|-------------|
-| `commands` | `Array[ChatCommand]` | Lista de comandos disponibles para `/` y autocompletado. |
+| `commands` | `Array[ChatCommand]` | Lista de todos los comandos disponibles para entrada `/` y autocompletado. |
 
 ---
 
@@ -364,17 +406,36 @@ La reproducción usa un único `AudioStreamPlayer` hijo del nodo (un sonido pued
 
 ## Recurso `ChatCommand`
 
-`class_name ChatCommand` extiende `Resource`.
+`class_name ChatCommand extends Resource`. Representa una entrada de comando individual.
 
 | Miembro | Tipo | Descripción |
 |---------|------|-------------|
-| `executed` | `signal executed(args: Array)` | Emitida al ejecutar el comando con la lista de argumentos (tokens tras el nombre). |
-| `command_name` | `String` | Nombre principal tras `/` (comparación **sin distinguir mayúsculas**). |
-| `aliases` | `PackedStringArray` | Nombres alternativos igualmente comparados en minúsculas. |
-| `description` | `String` | Texto en el panel de autocompletado junto al nombre del comando. |
-| `usage` | `String` | Campo exportado para documentar uso en tus propias pantallas de ayuda; **el addon no lo muestra** en la UI de sugerencias (solo `description`). |
+| `executed` | `signal executed(args: Array)` | Emitida al ejecutar el comando. `args` es un array de strings (los tokens tras el nombre). |
+| `command_name` | `String` | Nombre principal tras `/`. Coincidencia **sin distinguir mayúsculas** (`/Hello`, `/HELLO` y `/hello` coinciden con `"hello"`). |
+| `aliases` | `PackedStringArray` | Nombres alternativos, también comparados en minúsculas. Añadir `"tp"` aquí hace que `/tp` también dispare este comando. |
+| `description` | `String` | Texto corto mostrado en el panel de autocompletado junto al nombre. Mantenlo en una línea. |
+| `usage` | `String` | Documentación de uso más detallada para tus propias pantallas de ayuda. **El addon no lo muestra** en la UI de sugerencias; solo se muestra `description`. |
 
-**Parsing:** el texto `/cmd arg1 arg2` se trocea por espacios; el primer token (sin `/`) es el nombre del comando; el resto se pasa como `args` al emitir `executed`.
+### Parseo de argumentos
+
+Cuando el usuario envía `/cmd arg1 arg2 arg3`, el nodo:
+
+1. Elimina el `/` inicial.
+2. Divide el texto por espacios: `["cmd", "arg1", "arg2", "arg3"]`.
+3. Toma el primer token como nombre del comando.
+4. Pasa los tokens restantes como `args: Array` al emitir `executed`.
+
+```gdscript
+# El usuario escribe: /kick jugador123 trampa confirmada
+# args = ["jugador123", "trampa", "confirmada"]
+
+func _on_kick_executed(args: Array) -> void:
+    var objetivo: String = args[0] if args.size() >= 1 else ""
+    var razon: String = " ".join(args.slice(1)) if args.size() >= 2 else "sin razon"
+    print("Expulsado %s — Razón: %s" % [objetivo, razon])
+```
+
+Si no se proporcionan argumentos, `args` es un **array vacío** `[]`.
 
 ---
 
@@ -382,20 +443,44 @@ La reproducción usa un único `AudioStreamPlayer` hijo del nodo (un sonido pued
 
 ## Singleton global `EasyChat`
 
-Registrado por `plugin.gd` como autoload. Sirve de fachada cuando no tienes referencia directa al nodo.
+Registrado por `plugin.gd` como autoload (ruta: `res://addons/easychat/easychat.gd`). Disponible desde cualquier script como `EasyChat.*` sin necesitar una referencia al nodo.
 
 | Método | Comportamiento |
 |--------|----------------|
-| `enable()` | Igual que el nodo: habilita y muestra según lógica interna. |
-| `disable()` | Cierra, limpia historial, deshabilita y oculta. |
-| `is_open() -> bool` | Indica si hay nodo registrado y está abierto. |
-| `is_enabled() -> bool` | Indica si hay nodo y `_is_enabled` es verdadero (el código del singleton accede al nodo activo). |
-| `clear_history()` | Vacía el historial del nodo activo. |
-| `add_message(sender, text)` | Añade mensaje como **remoto** (color `remote_message_color`), sin pasar por input local. |
-| `add_system_message(text)` | Añade mensaje de sistema con prefijo y color de sistema. |
-| `set_player_name(name)` | Delegado al nodo (nombre local offline / base). |
+| `enable()` | Habilita y muestra el nodo activo. |
+| `disable()` | Fuerza el cierre, limpia el historial, deshabilita y oculta el nodo activo. |
+| `is_open() -> bool` | `true` si hay un nodo registrado y está abierto. |
+| `is_enabled() -> bool` | `true` si hay un nodo registrado y habilitado. |
+| `clear_history()` | Elimina todos los mensajes del historial del nodo activo. |
+| `add_message(sender: String, text: String)` | Inyecta un mensaje con estilo **remoto** (`remote_message_color`), sin pasar por el input local. También emite `message_received`. |
+| `add_system_message(text: String)` | Inyecta un mensaje de sistema (prefijo + `system_message_color`). **No** emite `message_received`. |
+| `set_player_name(name: String)` | Establece el nombre del jugador local usado como remitente. |
 
-Si no hay instancia válida registrada, las llamadas no hacen nada (salvo `is_open` / `is_enabled` que devuelven `false`).
+Si no hay ninguna instancia válida registrada, todas las llamadas son **no-ops** (excepto `is_open` / `is_enabled` que devuelven `false`).
+
+### Ejemplos de uso
+
+```gdscript
+# Establecer el nombre al iniciar partida
+func _on_game_ready() -> void:
+    EasyChat.set_player_name("MagoAzul")
+    EasyChat.enable()
+
+# Inyectar un anuncio del servidor desde código (no escrito por el usuario)
+func _on_server_event(texto: String) -> void:
+    EasyChat.add_system_message(texto)
+
+# Inyectar un mensaje que parece venir de otro jugador (o un NPC)
+func _on_npc_habla(nombre_npc: String, texto: String) -> void:
+    EasyChat.add_message(nombre_npc, texto)
+
+# Pausar el juego mientras el chat está abierto
+func _process(_delta: float) -> void:
+    if EasyChat.is_open():
+        get_tree().paused = true
+    else:
+        get_tree().paused = false
+```
 
 ---
 
@@ -403,20 +488,45 @@ Si no hay instancia válida registrada, las llamadas no hacen nada (salvo `is_op
 
 ## Señales
 
-### En el nodo `EasyChat` y reexpuestas en el singleton
+### En el nodo `EasyChat` (y reexpuestas por el singleton)
 
 | Señal | Parámetros | Cuándo |
 |-------|------------|--------|
-| `chat_opened` | — | Tras iniciar apertura (animaciones, sonido, foco diferido). |
-| `chat_closed` | — | Tras cerrar normalmente o cierre forzado (sesión cerrada, `disable`, etc.). |
-| `message_received` | `sender: String`, `message: String` | Por **cada** mensaje añadido al historial vía `_add_message` (local o remoto), **después** de actualizar UI y sonido. No se emite para mensajes solo de sistema (`_add_system_message` no conecta a esta señal). |
+| `chat_opened` | — | Se dispara al inicio de la secuencia de apertura (animaciones, sonido y foco diferido). |
+| `chat_closed` | — | Se dispara tras un cierre normal o forzado (sesión cerrada, `disable()`, etc.). |
+| `message_received` | `sender: String`, `message: String` | Se dispara por **cada** mensaje añadido al historial vía `_add_message` — tanto los enviados localmente como los recibidos de la red. No se dispara para mensajes de sistema. |
 
-Conecta desde cualquier script:
+### Conectar vía el singleton (recomendado)
 
 ```gdscript
-EasyChat.message_received.connect(_on_chat_message)
+extends Node
 
-func _on_chat_message(sender: String, message: String) -> void:
+func _ready() -> void:
+    EasyChat.chat_opened.connect(_on_chat_abierto)
+    EasyChat.chat_closed.connect(_on_chat_cerrado)
+    EasyChat.message_received.connect(_on_mensaje)
+
+func _on_chat_abierto() -> void:
+    # Ej: pausar el juego u ocultar otro UI
+    get_tree().paused = true
+
+func _on_chat_cerrado() -> void:
+    get_tree().paused = false
+
+func _on_mensaje(remitente: String, mensaje: String) -> void:
+    # Registrar chat en un archivo, desbloquear logros, etc.
+    print("[CHAT] %s: %s" % [remitente, mensaje])
+```
+
+### Conectar vía referencia directa al nodo
+
+```gdscript
+@onready var chat: Control = $CanvasLayer/EasyChat
+
+func _ready() -> void:
+    chat.message_received.connect(_on_mensaje)
+
+func _on_mensaje(remitente: String, mensaje: String) -> void:
     pass
 ```
 
@@ -426,13 +536,19 @@ func _on_chat_message(sender: String, message: String) -> void:
 
 ## Entrada de teclado y foco
 
-- **Abrir:** `open_key` en `_unhandled_key_input` solo si el chat está cerrado y habilitado.
-- **Cerrar / sugerencias:** `close_key` en `_input` cuando está abierto (primero cierra autocompletado si aplica).
-- **Con sugerencias visibles:** **Flecha arriba/abajo** navega, **Tab** aplica la sugerencia seleccionada (o la primera si no había selección).
-- Al **abrir** el chat: se guarda `Input.mouse_mode`, se fuerza `MOUSE_MODE_VISIBLE`, se llama `Input.action_release` para **todas** las acciones del `InputMap` (evita teclas “pegadas”).
-- Al **cerrar**: se restaura el modo de ratón anterior.
-- El botón enviar tiene `focus_mode = FOCUS_NONE` para mantener el foco en el `LineEdit`.
-- La raíz del nodo tiene `mouse_filter = IGNORE` para no interceptar clics del juego cuando el overlay no debe capturarlos; los controles hijos gestionan su propio filtro donde aplica.
+| Acción | Tecla | Dónde se procesa |
+|--------|-------|------------------|
+| Abrir chat | `open_key` (por defecto `T`) | `_unhandled_key_input` — solo si el chat está **cerrado** y **habilitado**. |
+| Cerrar chat / descartar autocompletado | `close_key` (por defecto `Escape`) | `_input` — primero cierra el panel de sugerencias si está visible, luego cierra el chat. Se consume antes que el resto. |
+| Navegar sugerencias | `↑` / `↓` | `_input` mientras el chat está abierto y el panel de sugerencias es visible. |
+| Aplicar sugerencia | `Tab` | `_input` mientras el chat está abierto; aplica la sugerencia seleccionada (o la primera si no hay ninguna). |
+
+### Foco y modo de ratón
+
+- **Al abrir:** se guarda `Input.mouse_mode` y se establece `MOUSE_MODE_VISIBLE`. Se llama `Input.action_release` para **cada** acción del `InputMap` para evitar teclas "pegadas" (p. ej. si el jugador mantenía pulsado un botón de movimiento al abrir el chat).
+- **Al cerrar:** se restaura el modo de ratón anterior.
+- El botón de enviar usa `focus_mode = FOCUS_NONE` para que el foco del teclado permanezca en el `LineEdit`.
+- El nodo raíz usa `mouse_filter = IGNORE` para no absorber clics del juego.
 
 ---
 
@@ -440,11 +556,40 @@ func _on_chat_message(sender: String, message: String) -> void:
 
 ## Mensajes, formato y colores
 
-- **Formato:** `message_format` con `{sender}` y `{message}`.
-- **Local vs remoto:** los mensajes que envías tú se pintan con `local_message_color`; los que llegan de red o los inyectados con `add_message` desde código se tratan como **remotos** en cuanto a color (el singleton `add_message` llama a `_add_message(..., false)`).
-- **Límite:** al alcanzar `max_messages`, se hace `queue_free` del hijo más antiguo de la lista.
-- **Scroll:** al añadir mensaje con el chat abierto, se desplaza al final en el frame siguiente.
-- **Chat cerrado:** si llega un mensaje (o sistema), se muestra **notificación** además de añadir al historial.
+### Plantilla de formato
+
+`message_format` en `EasyChatConfig` es una plantilla de texto aplicada a cada mensaje de jugador. Tokens soportados:
+
+| Token | Sustituido por |
+|-------|---------------|
+| `{sender}` | Nombre del remitente (jugador local o remoto). |
+| `{message}` | El cuerpo del mensaje. |
+
+Valor por defecto: `"{sender}: {message}"` → produce `"CaballeroVerde: Hola!"`
+
+Puedes personalizarlo libremente:
+
+```
+[{sender}] {message}       →  [CaballeroVerde] Hola!
+<{sender}> {message}       →  <CaballeroVerde> Hola!
+{sender} dice: {message}   →  CaballeroVerde dice: Hola!
+```
+
+### Tipos de mensajes y colores
+
+| Tipo | Propiedad de color | Originado por |
+|------|--------------------|---------------|
+| Local | `local_message_color` | Mensajes que envías tú (verde por defecto). |
+| Remoto | `remote_message_color` | Mensajes de otros jugadores o `EasyChat.add_message()` (blanco por defecto). |
+| Sistema | `system_message_color` | `EasyChat.add_system_message()` o error de comando desconocido (amarillo por defecto). |
+
+### Límite de historial
+
+Cuando se alcanza `max_messages`, el `Label` más antiguo de la lista es eliminado con `queue_free` antes de añadir el nuevo.
+
+### Comportamiento del scroll
+
+Cuando se añade un mensaje con el chat **abierto**, el scroll container baja al final en el siguiente frame. Si el chat está **cerrado**, se muestra una notificación flotante en su lugar.
 
 ---
 
@@ -452,13 +597,297 @@ func _on_chat_message(sender: String, message: String) -> void:
 
 ## Comandos (`/`) y autocompletado
 
-- Cualquier línea que **empiece por** `/` se interpreta como comando; no se envía como mensaje de chat de jugador.
-- Si no coincide ningún `ChatCommand`, se muestra un mensaje de sistema: `Unknown command: /nombre`.
-- Si `close_on_send` es `true`, tras un comando se **cierra** el chat (igual que tras un mensaje normal).
-- **Autocompletado:** al escribir `/` y texto sin espacio en el primer token, se filtran comandos cuyo `command_name` o algún `alias` **empieza por** el prefijo en minúsculas.
-- Un mismo comando puede aparecer **más de una vez** en la lista filtrada si coincide por nombre y por alias (comportamiento actual del bucle).
-- Panel de sugerencias: altura basada en `mini(coincidencias, max_suggestions_visible) * suggestion_item_height + 6`.
-- Clic en fila o **Tab** completa `/nombrecomando ` en el campo y cierra el panel.
+Cualquier línea de entrada que **empiece por `/`** se trata como un comando y **nunca** se envía como mensaje de chat. Esta sección explica cada paso desde la creación de un recurso de comando hasta su manejo en la lógica del juego, con ejemplos de código completos.
+
+### Cómo funciona la ejecución de comandos
+
+Cuando el usuario pulsa Enter en `/cmd arg1 arg2`:
+
+1. El nodo detecta el `/` inicial.
+2. Divide el texto por espacios: `["cmd", "arg1", "arg2"]`.
+3. Busca en `config.commands` un `ChatCommand` cuyo `command_name` o algún `alias` coincida con `"cmd"` (sin distinción de mayúsculas).
+4. Si lo encuentra: emite `command.executed.emit(["arg1", "arg2"])`.
+5. Si **no lo encuentra**: muestra `▶ Unknown command: /cmd` como mensaje de sistema.
+
+---
+
+### Paso 1 — Crear un recurso `ChatCommand`
+
+En el panel **FileSystem**:
+1. Clic derecho en la carpeta donde quieras guardar los comandos (p. ej. `res://chat/comandos/`).
+2. Selecciona **New Resource**.
+3. Escribe `ChatCommand` en el buscador y pulsa Enter.
+4. Dale un nombre al archivo (p. ej. `cmd_hola.tres`) y guárdalo.
+
+También puedes crear comandos por código (útil para comandos registrados de forma procedural):
+
+```gdscript
+var cmd = ChatCommand.new()
+cmd.command_name = "hola"
+cmd.aliases = PackedStringArray(["hi", "hey"])
+cmd.description = "Saluda a todos"
+cmd.usage = "/hola"
+```
+
+---
+
+### Paso 2 — Rellenar las propiedades del comando
+
+Selecciona tu archivo `.tres` y abre el inspector:
+
+- **`command_name`** — El disparador principal. Escribe `hola` aquí (sin `/`). La coincidencia no distingue mayúsculas: el usuario puede escribir `/Hola`, `/HOLA` o `/hola` y todas coincidirán.
+- **`aliases`** — Nombres alternativos opcionales. P. ej. `["hi", "hey"]` hace que `/hi` y `/hey` también disparen este comando.
+- **`description`** — Texto corto que se muestra en el desplegable de autocompletado. Ej: `"Saluda a todos en el chat"`. Mantenlo en una línea.
+- **`usage`** — Sintaxis completa para tus propias pantallas de ayuda. Ej: `"/hola"`. **No se muestra** en el panel de autocompletado.
+
+---
+
+### Paso 3 — Añadir el comando a `EasyChatConfig`
+
+Abre tu `EasyChatConfig.tres` en el inspector:
+1. Desplázate hasta el grupo **Commands**.
+2. Haz clic en el array `commands` para expandirlo.
+3. Haz clic en el botón **+** para añadir un elemento.
+4. Arrastra tu `cmd_hola.tres` al nuevo slot (o usa el selector de recursos).
+
+Repite esto para cada comando que quieras registrar. Los comandos se comprueban en orden; si dos tienen el mismo nombre, gana el primero.
+
+---
+
+### Paso 4 — Conectar la señal `executed`
+
+El recurso `ChatCommand` tiene la señal `executed(args: Array)`. Conéctala desde **cualquier script** de tu proyecto que tenga una referencia al mismo archivo `.tres`. Como `ChatCommand` es un `Resource`, todos los scripts que hagan `preload` de la misma ruta comparten el **mismo objeto** y recibirán la señal cuando el comando se dispare.
+
+#### Opción A — `preload` en tu script (recomendado)
+
+```gdscript
+# En cualquier script — no necesita estar en la misma escena que EasyChat
+extends Node
+
+var cmd_hola = preload("res://chat/comandos/cmd_hola.tres")
+
+func _ready() -> void:
+    cmd_hola.executed.connect(_on_hola_ejecutado)
+
+func _on_hola_ejecutado(args: Array) -> void:
+    EasyChat.add_system_message("¡Hola a todos!")
+```
+
+#### Opción B — Iterar por la lista de comandos del config
+
+Útil cuando quieres manejar todos los comandos en un solo lugar sin tener referencias individuales:
+
+```gdscript
+@onready var chat: Control = $CanvasLayer/EasyChat
+
+func _ready() -> void:
+    for cmd in chat.config.commands:
+        match cmd.command_name:
+            "hola":
+                cmd.executed.connect(_on_hola_ejecutado)
+            "teletransportar":
+                cmd.executed.connect(_on_teletransportar_ejecutado)
+            "expulsar":
+                cmd.executed.connect(_on_expulsar_ejecutado)
+```
+
+---
+
+### Ejemplo A — Comando sin argumentos: `/ping`
+
+Un simple `/ping` que muestra un mensaje de estado.
+
+**Propiedades de `cmd_ping.tres`:**
+- `command_name`: `ping`
+- `description`: `Verifica el estado de conexión`
+
+**Script:**
+
+```gdscript
+extends Node
+
+var cmd_ping = preload("res://chat/comandos/cmd_ping.tres")
+
+func _ready() -> void:
+    cmd_ping.executed.connect(_on_ping)
+
+func _on_ping(args: Array) -> void:
+    # args es [] cuando el usuario escribe solo "/ping"
+    # Los argumentos extra se ignoran en este ejemplo
+    EasyChat.add_system_message("¡Pong! El servidor es accesible.")
+```
+
+**Uso en el juego:**
+```
+/ping           →  ▶ ¡Pong! El servidor es accesible.
+/ping algo      →  ▶ ¡Pong! El servidor es accesible.  (args ignorados)
+```
+
+---
+
+### Ejemplo B — Comando con argumentos requeridos: `/teletransportar x y`
+
+Un comando que mueve al jugador local a una posición específica.
+
+**Propiedades de `cmd_teleport.tres`:**
+- `command_name`: `teletransportar`
+- `aliases`: `["tp"]`
+- `description`: `Mueve al jugador a una posición — /teletransportar <x> <y>`
+
+**Script:**
+
+```gdscript
+extends Node
+
+@export var jugador: CharacterBody2D
+
+var cmd_tp = preload("res://chat/comandos/cmd_teleport.tres")
+
+func _ready() -> void:
+    cmd_tp.executed.connect(_on_teletransportar)
+
+func _on_teletransportar(args: Array) -> void:
+    if args.size() < 2:
+        EasyChat.add_system_message("Uso: /teletransportar <x> <y>")
+        return
+
+    var x := float(args[0])
+    var y := float(args[1])
+
+    if is_instance_valid(jugador):
+        jugador.global_position = Vector2(x, y)
+        EasyChat.add_system_message("Teletransportado a (%.0f, %.0f)" % [x, y])
+    else:
+        EasyChat.add_system_message("Error: referencia al jugador no establecida.")
+```
+
+**Uso en el juego:**
+```
+/teletransportar 320 200   →  ▶ Teletransportado a (320, 200)
+/tp 0 0                    →  ▶ Teletransportado a (0, 0)       (¡el alias funciona!)
+/teletransportar           →  ▶ Uso: /teletransportar <x> <y>  (pocos argumentos)
+/teletransportar abc 200   →  ▶ Teletransportado a (0, 200)    (float("abc") = 0.0)
+```
+
+---
+
+### Ejemplo C — Comando con argumentos opcionales: `/gritar [texto]`
+
+Un comando `/gritar` que emite un texto personalizado en mayúsculas o una frase por defecto.
+
+**Propiedades de `cmd_gritar.tres`:**
+- `command_name`: `gritar`
+- `description`: `Grita un mensaje en mayúsculas. Uso: /gritar [texto]`
+
+**Script:**
+
+```gdscript
+extends Node
+
+var cmd_gritar = preload("res://chat/comandos/cmd_gritar.tres")
+
+func _ready() -> void:
+    cmd_gritar.executed.connect(_on_gritar)
+
+func _on_gritar(args: Array) -> void:
+    var texto: String
+    if args.is_empty():
+        texto = "¡AAAAAAAA!"
+    else:
+        texto = " ".join(args).to_upper() + "!"
+
+    EasyChat.add_system_message(texto)
+```
+
+**Uso en el juego:**
+```
+/gritar                   →  ▶ ¡AAAAAAAA!
+/gritar hola mundo        →  ▶ HOLA MUNDO!
+/gritar el pastel es mio  →  ▶ EL PASTEL ES MIO!
+```
+
+---
+
+### Ejemplo D — Comando con cantidad variable de argumentos: `/expulsar [jugador] [razon...]`
+
+Un comando de moderación que acepta cualquier número de palabras como razón.
+
+**Script:**
+
+```gdscript
+extends Node
+
+var cmd_expulsar = preload("res://chat/comandos/cmd_expulsar.tres")
+
+func _ready() -> void:
+    cmd_expulsar.executed.connect(_on_expulsar)
+
+func _on_expulsar(args: Array) -> void:
+    if args.is_empty():
+        EasyChat.add_system_message("Uso: /expulsar <jugador> [razon]")
+        return
+
+    var objetivo: String = args[0]
+    var razon: String = "Sin razón especificada"
+
+    if args.size() >= 2:
+        razon = " ".join(args.slice(1))  # une todas las palabras restantes
+
+    EasyChat.add_system_message("Expulsado %s — Razón: %s" % [objetivo, razon])
+    # Aquí llamarías a tu lógica de juego para expulsar realmente al jugador
+```
+
+**Uso en el juego:**
+```
+/expulsar                        →  ▶ Uso: /expulsar <jugador> [razon]
+/expulsar jugador123             →  ▶ Expulsado jugador123 — Razón: Sin razón especificada
+/expulsar jugador123 hacia trampa →  ▶ Expulsado jugador123 — Razón: hacia trampa
+```
+
+---
+
+### Escuchar un comando desde una escena diferente
+
+Dado que `ChatCommand` es un `Resource`, **cualquier** escena que cargue el mismo `.tres` recibirá el evento `executed` cuando el comando se dispare, aunque esa escena no contenga el nodo EasyChat.
+
+```gdscript
+# res://game/jugador.gd  (el nodo EasyChat está en otra escena)
+extends CharacterBody2D
+
+var cmd_tp = preload("res://chat/comandos/cmd_teleport.tres")
+
+func _ready() -> void:
+    cmd_tp.executed.connect(_on_teletransportar)
+
+func _on_teletransportar(args: Array) -> void:
+    if args.size() < 2:
+        return
+    global_position = Vector2(float(args[0]), float(args[1]))
+```
+
+Esto funciona porque todos los scripts que hacen `preload` (o `load`) de la misma ruta obtienen **el mismo objeto** en memoria. La señal se emite sobre ese objeto compartido y todos los callables conectados la reciben.
+
+---
+
+### Prevenir conexiones duplicadas
+
+Si tu escena puede instanciarse varias veces o `_ready` podría ejecutarse más de una vez, protege la conexión:
+
+```gdscript
+func _ready() -> void:
+    if not cmd_hola.executed.is_connected(_on_hola_ejecutado):
+        cmd_hola.executed.connect(_on_hola_ejecutado)
+```
+
+---
+
+### Comportamiento del autocompletado
+
+- Escribir `/` muestra todos los comandos disponibles.
+- Escribir `/h` filtra a los comandos cuyo `command_name` o algún `alias` **empiece por** `h` (sin distinción de mayúsculas).
+- Usa **↑** / **↓** para navegar por la lista; pulsa **Tab** para aplicar la sugerencia resaltada (rellena `/nombrecomando ` en el input y cierra el panel).
+- Haz clic en una sugerencia para aplicarla inmediatamente.
+- Pulsar **Escape** cierra primero el panel de sugerencias; pulsarlo de nuevo cierra el chat.
 
 ---
 
@@ -470,30 +899,68 @@ EasyChat no implementa red por sí mismo: delega en **LinkUx** cuando `multiplay
 
 ### Contrato esperado con LinkUx (según el uso en código)
 
-El nodo obtiene `get_node_or_null("/root/LinkUx")` y utiliza:
+El nodo hace `get_node_or_null("/root/LinkUx")` y utiliza las siguientes APIs:
 
 | API usada | Propósito |
 |-----------|-----------|
-| `session_started` (señal) | Registrar RPC y actualizar nombre local y visibilidad. |
-| `session_closed` (señal) | Cerrar chat de golpe y actualizar visibilidad. |
-| `is_in_session() -> bool` | Saber si debe registrarse el RPC y si al enviar hay que hacer broadcast. |
-| `get_local_player_name() -> String` | Nombre del remitente local; si la cadena no está vacía, sustituye `_local_player_name`. |
-| `register_rpc(rpc_name: String, callable: Callable)` | Registra el manejador del chat (nombre interno `easychat_message`). |
-| `broadcast_rpc(rpc_name: String, args: Array, reliable: bool)` | Envía `[sender, text]` a los peers; en código se pasa `true` como tercer argumento (emisión fiable). |
+| `session_started` (señal) | Registra RPCs y actualiza nombre del jugador local y visibilidad. |
+| `session_closed` (señal) | Fuerza el cierre del chat y actualiza visibilidad. |
+| `is_in_session() -> bool` | Determina si registrar RPCs y si al enviar hay que hacer broadcast. |
+| `get_local_player_name() -> String` | Nombre del remitente local; sustituye `_local_player_name` si no está vacío. |
+| `register_rpc(rpc_name: String, callable: Callable)` | Registra `"easychat_message"` y `"easychat_system"`. |
+| `broadcast_rpc(rpc_name: String, args: Array, reliable: bool)` | Envía `[sender, text]` a todos los peers de forma fiable. |
 
-### Flujo de envío
+### Flujo completo de envío
 
-- Mensaje **sin** `/`: si hay sesión y LinkUx válido, `broadcast_rpc("easychat_message", [sender, text], true)` y además `_add_message(sender, text, true)` localmente.
-- Mensaje **remoto:** el callable registrado recibe `_on_chat_rpc(_from_peer, sender, message)` y añade el mensaje como no local.
+```
+El usuario pulsa Enter en "¡Hola!"
+        │
+        ▼
+¿Es un comando (/…)?  ──Sí──►  _execute_command()  ──►  cmd.executed.emit(args)
+        │ No
+        ▼
+¿multiplayer_enabled y sesión activa?
+        │ Sí                                    │ No
+        ▼                                       ▼
+broadcast_rpc("easychat_message",          _add_message(sender, text, true)
+    [sender, text], true)                   (solo local)
+        │
+        ▼
+_add_message(sender, text, true)  ← también se añade localmente
+        │
+        ▼
+Peers remotos reciben RPC → _on_chat_rpc(_from_peer, sender, message)
+        │
+        ▼
+_add_message(sender, message, false)  ← estilo remoto en cada peer
+```
 
 ### Visibilidad del nodo con multijugador
 
-- `_update_visibility()` asigna `visible = _is_enabled` (no fuerza visible solo por estar en sesión; tú debes llamar `enable()` o tener el nodo habilitado según tu flujo).
-- Si la sesión se cierra mientras el chat está abierto, se llama `_force_close()` (sin animaciones largas: resetea paneles y emite `chat_closed`).
+`_update_visibility()` establece `visible = _is_enabled`. El nodo **no** se vuelve visible automáticamente al iniciarse la sesión; debes llamar a `EasyChat.enable()` tú mismo como parte de tu flujo de inicio de sesión:
+
+```gdscript
+func _on_session_started() -> void:
+    EasyChat.set_player_name(mi_nombre_de_jugador)
+    EasyChat.enable()
+```
+
+### Mensajes de sistema en multijugador
+
+```gdscript
+# Esto envía un mensaje de sistema a TODOS los peers conectados
+EasyChat.add_system_message("¡La ronda ha comenzado!")
+
+# add_system_message con broadcast=true (por defecto) usa el RPC easychat_system
+# En los peers remotos, _on_system_rpc llama a _add_system_message(..., false) para evitar bucles
+```
 
 ### Errores comunes
 
-- `multiplayer_enabled` sin autoload LinkUx: **error** en consola y sin sincronización de mensajes.
+| Síntoma | Causa |
+|---------|-------|
+| El chat en red no hace nada | `multiplayer_enabled` es `true` pero no hay autoload LinkUx. Revisa la consola por el error explícito. |
+| Los mensajes no llegan a todos los peers | La sesión no ha comenzado todavía (`LinkUx.is_in_session()` devuelve `false`). |
 
 ---
 
@@ -501,10 +968,12 @@ El nodo obtiene `get_node_or_null("/root/LinkUx")` y utiliza:
 
 ## Animaciones
 
-- Historial y fila de entrada tienen **tweens independientes** al abrir/cerrar; al reabrir se hace `kill()` del tween anterior si existe.
-- **FADE** en la entrada: al abrir parte de `alpha_input_closed` (o 0 si no aplica); al cerrar vuelve a `alpha_input_closed` si el tipo es FADE, o a 0 si otro tipo.
-- **SCALE** en historial/entrada: pivote vertical en el borde inferior del control (`pivot_offset` calculado con `size.y` o `slide_dist`).
-- Cierre **forzado** (`_force_close`): mata tweens, resetea posición/escala/opacidad y estados de autocompletado.
+- El panel de historial y la fila de entrada usan **tweens independientes** al abrir/cerrar.
+- Si se reabre mientras la animación de cierre aún está en curso: el tween anterior recibe `kill()` y comienza uno nuevo.
+- **FADE en la fila de entrada**: al abrir transiciona desde `alpha_input_closed` hasta opacidad completa; al cerrar vuelve a `alpha_input_closed` (tipo FADE) o a `0` (todos los demás tipos).
+- **SCALE**: pivote vertical en el borde inferior del control (`pivot_offset.y` = `size.y` o `slide_dist`). Usa easing `TRANS_BACK` al aparecer y `TRANS_CUBIC` al ocultarse.
+- **Tipos SLIDE**: usan propiedades `offset_*` (no `position`) para respetar el layout anclado.
+- **Cierre forzado** (`_force_close`): mata ambos tweens inmediatamente, fija todos los valores en estado cerrado y oculta el panel de autocompletado. Se usa cuando una sesión termina o se llama a `disable()`.
 
 ---
 
@@ -512,10 +981,12 @@ El nodo obtiene `get_node_or_null("/root/LinkUx")` y utiliza:
 
 ## Notificaciones flotantes
 
-- `_show_notification` permite acumular varias entradas en pantalla hasta `max_notifications`.
-- Cada nueva entrada usa `notification_anim_type` y `notification_anim_duration` para su aparición (`FADE`, `SLIDE_*` o `SCALE`), y permanece visible durante `notification_duration`.
-- La salida sigue realizándose con fundido de opacidad hasta 0 antes de liberar el nodo.
-- Se usa cuando el chat está **cerrado** y llega un mensaje/sistema, y cuando `close_on_send` muestra el último mensaje enviado al cerrar.
+Las notificaciones aparecen en la parte inferior de la pantalla cuando el panel del chat está **cerrado** y llega un nuevo mensaje (de jugador o de sistema). También aparecen cuando `close_on_send` es `true` y el usuario acaba de enviar un mensaje.
+
+- Hasta `max_notifications` entradas pueden apilarse en pantalla simultáneamente. La más antigua se elimina inmediatamente al superar el límite.
+- Cada entrada usa `notification_anim_type` y `notification_anim_duration` para su animación de aparición.
+- La salida siempre hace fade del alfa hasta `0` en `0.4 s` independientemente de `notification_anim_type`, luego el nodo es liberado.
+- `notification_duration` controla cuántos segundos permanece la notificación a opacidad completa entre aparecer y hacer fade-out.
 
 ---
 
@@ -523,7 +994,17 @@ El nodo obtiene `get_node_or_null("/root/LinkUx")` y utiliza:
 
 ## Sonidos
 
-Ver [Grupo **Sounds**](#config-resource/grupo-sounds) en `EasyChatConfig`. Si asignas recursos largos, ten en cuenta que hay un solo reproductor.
+Asigna recursos `AudioStream` a las propiedades de sonido en `EasyChatConfig`. Las cinco son opcionales (`null` = silencio).
+
+| Propiedad | Cuándo se reproduce |
+|-----------|---------------------|
+| `sound_message_received` | Llega un mensaje de un jugador no local. |
+| `sound_system_message` | Se añade un mensaje de sistema. |
+| `sound_message_sent` | El jugador local envía un mensaje. |
+| `sound_chat_opened` | Se abre el chat. |
+| `sound_chat_closed` | Se cierra el chat. |
+
+Todos los sonidos comparten un único nodo `AudioStreamPlayer` hijo. Si se dispara un sonido nuevo antes de que el anterior termine, el anterior es **interrumpido**.
 
 ---
 
@@ -531,11 +1012,12 @@ Ver [Grupo **Sounds**](#config-resource/grupo-sounds) en `EasyChatConfig`. Si as
 
 ## Vista previa en el editor
 
-El script del nodo lleva `@tool`. En el editor:
+El script del nodo lleva `@tool`, lo que permite una vista previa en tiempo real en el editor:
 
-- Si hay `config`, se conecta `config.changed` para refrescar layout/tema/propiedades.
-- `_rebuild()` libera hijos, recrea la UI y deja el chat en estado **abierto** para inspeccionar paneles.
-- `_ready()` en editor no registra el singleton ni multiplayer; solo construye la vista previa.
+- Asignar o modificar el recurso **config** actualiza la vista previa inmediatamente vía la señal `config.changed`.
+- `_rebuild()` libera todos los hijos de UI y los reconstruye desde cero, dejando el chat en estado **abierto** para que puedas inspeccionar todos los paneles.
+- `_ready()` en el editor solo construye la vista previa; **no** registra el singleton, configura el multijugador ni conecta señales de juego.
+- Cambiar propiedades del config (colores, layout, animaciones, etc.) se refleja en el viewport mientras editas.
 
 ---
 
@@ -543,12 +1025,13 @@ El script del nodo lleva `@tool`. En el editor:
 
 ## Limitaciones y convenciones
 
-1. **Una instancia activa por escena** ligada al singleton: una segunda instancia genera **warning** y no reemplaza la primera.
-2. **Nombre del RPC** fijo en código: `"easychat_message"` (debe estar registrado en LinkUx sin colisionar con otros usos).
-3. **`usage` en `ChatCommand`** no aparece en el autocompletado del addon.
-4. **Comandos** no se sincronizan por red en el código actual: solo el texto plano tras `broadcast_rpc`. La lógica de comando es **local** al cliente que escribe `/`.
-5. **`is_enabled()` del singleton** inspecciona `_is_enabled` del nodo (convención interna; si amplías el nodo, mantén coherencia).
-6. El nodo raíz **no** bloquea input global por capa adicional; el diseño asume que abrir el chat es una decisión de UX (ratón visible, acciones liberadas).
+1. **Una instancia activa por escena** para el singleton: un segundo nodo EasyChat genera **warning** y el singleton continúa delegando en el primero. Ambos nodos siguen renderizando de forma independiente.
+2. **Nombres de RPC fijos en código**: `"easychat_message"` y `"easychat_system"` (no deben colisionar con otros sistemas en LinkUx).
+3. **`usage` en `ChatCommand`** no se muestra en la UI de autocompletado del addon. Muéstralo tú mismo en un handler de `/ayuda`.
+4. **Los comandos no se sincronizan por red**: solo se hace broadcast de mensajes de texto plano. Cada cliente ejecuta `/cmd` localmente — solo el cliente que escribió el comando dispara `executed`.
+5. **`EasyChat.is_enabled()`** lee directamente el campo interno `_is_enabled` del nodo activo. Mantenlo coherente si subclasificas el nodo.
+6. **Sin BBCode ni rich text** en los mensajes; el historial usa nodos `Label` simples. Para habilitar texto enriquecido, cambia `_add_message` y `_add_system_message` para usar `RichTextLabel`.
+7. El nodo raíz **no** añade una capa de bloqueo de input; el diseño asume que abrir el chat es una acción explícita y visible (cursor visible, inputs liberados).
 
 ---
 
@@ -558,26 +1041,23 @@ El script del nodo lleva `@tool`. En el editor:
 
 ### Rendimiento y memoria
 
-- Aumenta `max_messages` solo en la medida necesaria: cada mensaje es un `Label` hijo; valores muy altos implican más nodos y más coste de layout en el `VBoxContainer`.
-- Para **tráfico muy alto**, valora:
-  - **Virtualización** (sustituir la lista de `Label` por un control que reutilice filas) — requiere fork o extensión del addon.
-  - **Ventana deslizante** más agresiva (ya existe límite; puedes bajar `max_messages` en consolas o móviles).
-- **Autocompletado:** `max_suggestions_visible` y `suggestion_item_height` controlan cuántas filas se construyen en UI por pulsación de tecla; muchos comandos no son problema hasta que el filtro devuelve decenas de entradas visibles.
+- Cada mensaje es un `Label` hijo; valores muy altos de `max_messages` aumentan el trabajo de layout en el `VBoxContainer`. Mantenlo razonable para la plataforma objetivo (p. ej. 50–100 para móvil).
+- Para **tráfico muy alto** (p. ej. MMO), considera **virtualizar** la lista de mensajes (reutilizar un conjunto fijo de controles de fila) — esto requiere hacer un fork o extender `easychat_node.gd`.
+- El autocompletado construye filas de UI en cada pulsación de tecla mientras el usuario escribe un prefijo de comando; cientos de comandos funcionan bien, pero si tienes muchos comandos con prefijos cortos podrías querer hacer debounce o cachear resultados.
 
 ### Multijugador y moderación
 
-- El addon **no** incluye rate limiting, anti-spam ni validación de contenido: implementa capas en LinkUx, en un servidor autoritativo o conectando `message_received` / reglas en tu juego.
-- Si necesitas **historial persistente** o **salas**, centraliza la lógica fuera del nodo y usa `EasyChat.add_message` / `add_system_message` para reflejar el estado.
-- Para **muchos jugadores**, el coste suele estar en el backend y en la política de broadcast, no solo en el widget UI.
+- El addon **no** incluye rate limiting, anti-spam ni filtrado de contenido. Implementa estas capas en LinkUx, en un servidor autoritativo o mediante la señal `message_received`.
+- Para **historial persistente** o **salas de chat**, centraliza la lógica fuera del nodo y mueve la UI a través de `EasyChat.add_message` / `add_system_message`.
 
 ### Contenido y localización
 
-- `message_format`, prefijos y textos de comando son cadenas en el recurso: duplica `.tres` por idioma o asigna desde código en tiempo de carga.
-- **BBCode** no está habilitado en los `Label` actuales; si necesitas rich text, habría que cambiar el tipo de nodo en `_add_message` / `_add_system_message`.
+- `message_format`, `system_message_prefix` y textos de comando viven en el recurso: duplica archivos `.tres` por idioma o asígnalos en tiempo de carga para soportar localización.
+- **BBCode** no está habilitado en los labels actuales; reemplázalos con `RichTextLabel` en una subclase para soportar negrita, colores, enlaces, etc.
 
-### Varios chats o contextos
+### Múltiples contextos de chat
 
-- El singleton asume **un** nodo activo por escena: para HUD distintos (lobby vs partida), **desregistra** el anterior al cambiar de escena o usa solo el nodo sin depender del singleton global.
+El singleton asume **un** nodo activo. Para HUDs diferentes (lobby vs. partida), desregistra el anterior al cambiar de escena, o evita el singleton global y usa referencias directas al nodo.
 
 ---
 
@@ -587,25 +1067,31 @@ El script del nodo lleva `@tool`. En el editor:
 
 ### Puntos de extensión recomendados
 
-- **Subclase del nodo:** crea un script que extienda `easychat_node.gd` (o duplica el archivo en tu proyecto) y cambia el `custom_type` en un fork del plugin, o añade el nodo por script. Así puedes sobreescribir `_add_message`, `_execute_command`, etc., sin tocar el original.
-- **Recurso `EasyChatConfig`:** puedes añadir nuevas `@export` y leerlas en tu subclase si duplicas el nodo; el recurso base no aplicará propiedades que no conozca `_apply_theme` / `_apply_layout`.
-- **LinkUx:** si el nombre del autoload no es `LinkUx`, ajusta `get_node_or_null("/root/LinkUx")` y las señales esperadas en `_setup_multiplayer`.
+- **Subclase del nodo**: extiende `easychat_node.gd` y sobreescribe `_add_message`, `_execute_command`, `_show_notification`, etc. sin tocar los archivos originales.
+- **Añadir propiedades al config**: extiende `EasyChatConfig` con nuevos `@export` y léelos en tu subclase. El nodo base no fallará — simplemente no conocerá las nuevas propiedades.
+- **Cambiar el nombre del autoload LinkUx**: si tu autoload no es `"LinkUx"`, edita `get_node_or_null("/root/LinkUx")` en `_setup_multiplayer` y actualiza los nombres de señales esperados.
 
-### Constantes y RPC
+### Constantes y nombres de RPC
 
-- `_RPC_NAME := "easychat_message"` en `easychat_node.gd`: cámbialo si colisiona con otro sistema; mantén coherencia con `register_rpc` / `broadcast_rpc`.
+```gdscript
+# En easychat_node.gd
+const _RPC_NAME   := "easychat_message"
+const _RPC_SYSTEM := "easychat_system"
+```
+
+Cámbialos si colisionan con otros sistemas. Mantén las llamadas a `register_rpc` y `broadcast_rpc` sincronizadas.
 
 ### Layout de notificación
 
-- En `_apply_layout()`, los offsets de `_notif_panel` usan valores derivados de `input_top` y constantes (`-3`, `-46`): ajústalos si quieres la burbuja más arriba o anclada al historial.
+`_apply_layout()` calcula los offsets de notificación relativos a `input_top` con pequeñas constantes fijas. Ajústalas para subir las notificaciones, anclarlas al panel de historial o colocarlas en otro lado de la pantalla.
 
-### Duplicar comandos en autocompletado
+### Comandos duplicados en el autocompletado
 
-- El bucle en `_update_autocomplete` puede añadir el mismo `ChatCommand` dos veces si nombre y alias coinciden con el prefijo; si te molesta, deduplica en una subclase sobrescribiendo `_update_autocomplete`.
+`_update_autocomplete` puede añadir el mismo `ChatCommand` dos veces si tanto su `command_name` como algún `alias` coinciden con el prefijo escrito. Sobreescribe `_update_autocomplete` en una subclase para deduplicar.
 
-### Editor
+### Plugin del editor
 
-- Si cambias rutas de `preload` en `plugin.gd`, mantén `res://addons/easychat/...` o actualiza el plugin.
+Si cambias las rutas de `preload` en `plugin.gd` (p. ej. tras mover la carpeta del addon), actualiza todas las referencias `res://addons/easychat/…` correspondientes.
 
 ---
 
@@ -613,14 +1099,17 @@ El script del nodo lleva `@tool`. En el editor:
 
 ## Solución de problemas
 
-| Síntoma | Posible causa |
-|---------|----------------|
-| `EasyChat.*` no hace nada | No hay nodo **EasyChat** en la escena actual o no llegó a `_register` (orden de carga, nodo deshabilitado antes de `_ready`). |
-| Advertencia de dos instancias | Dos nodos EasyChat en la misma escena; deja solo uno o no uses el singleton para ambos. |
-| Chat en red no envía | LinkUx no instalado o autoload distinto de `/root/LinkUx`; sesión no iniciada (`is_in_session` falso); revisa consola por el error explícito. |
-| No abre con la tecla | Otra UI consume el evento antes; `open_key` usa `_unhandled_key_input`. Comprueba que `_is_enabled` sea true. |
-| Comando no encontrado | Nombre distinto, typo, o comando no está en `config.commands` del recurso **realmente asignado** al nodo. |
-| Sin sonido | Stream nulo en el recurso o formato no soportado por `AudioStreamPlayer`. |
+| Síntoma | Causa probable y solución |
+|---------|--------------------------|
+| Las llamadas a `EasyChat.*` no hacen nada | No hay nodo **EasyChat** en la escena actual, o `_register` nunca se ejecutó (orden de carga, nodo deshabilitado antes de `_ready`). Comprueba que el nodo esté en el árbol y el plugin activado. |
+| Advertencia de dos instancias en la consola | Dos nodos EasyChat en la misma escena. Deja solo uno, o accede a cada uno independientemente sin usar el singleton. |
+| El chat en red no envía | LinkUx no instalado o no está en `/root/LinkUx`; sesión no iniciada aún; `multiplayer_enabled` es `false`. Revisa la consola por el mensaje de error explícito. |
+| La tecla de abrir (`T`) no hace nada | Otro control de UI está consumiendo el evento primero (`_unhandled_key_input` se procesa al final). También verifica que `_is_enabled` sea `true` — llama a `EasyChat.enable()` desde código. |
+| Comando no encontrado / "Unknown command" | Typo en `command_name`, o el comando no está en `config.commands` del recurso **realmente asignado** al nodo (puede estar usando el config por defecto, no tu `.tres`). |
+| La señal `executed` no se dispara | El recurso de comando conectado en código puede no ser el mismo objeto que el del config. Asegúrate de hacer `preload` de exactamente la misma ruta `.tres`, o itera por `chat.config.commands` para obtener la referencia en vivo. |
+| Sin sonido | El stream es `null` en el recurso, o el formato de audio no es compatible con `AudioStreamPlayer`. |
+| El autocompletado no aparece | El comando está en el config pero el prefijo escrito no coincide con `command_name` ni con ningún `alias`. Recuerda que la coincidencia usa `begins_with`, no contiene. |
+| El chat está invisible tras `enable()` | `visible` del nodo se establece a `_is_enabled`. Si algún padre está oculto, el nodo también lo estará. Comprueba la cadena de visibilidad de los nodos padre. |
 
 ---
 
@@ -628,7 +1117,7 @@ El script del nodo lleva `@tool`. En el editor:
 
 ## Créditos
 
-- **EasyChat** — IUX Games, Isaackiux (versión **1.1.0** según `plugin.cfg`).
+- **EasyChat** — IUX Games, Isaackiux (versión **1.1.0**).
 
 ---
 

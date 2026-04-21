@@ -566,6 +566,9 @@
         ? marked.parse(md)
         : `<pre>${md.replace(/</g, "&lt;")}</pre>`;
     docEl.innerHTML = html;
+    if (typeof hljs !== "undefined") {
+      docEl.querySelectorAll("pre code").forEach((el) => hljs.highlightElement(el));
+    }
     ensureHeadingIds(docEl);
     rewriteInternalLinks(docEl);
     buildToc(docEl);
