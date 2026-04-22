@@ -3,7 +3,7 @@
 # EasyChat
 
 [![Godot 4](https://img.shields.io/badge/Godot-4.x-478cbf?logo=godotengine&logoColor=white)](https://godotengine.org/)
-[![Version](https://img.shields.io/badge/version-1.1.0-5aafff)](./plugin.cfg)
+[![Version](https://img.shields.io/badge/version-2.0.0-5aafff)](./plugin.cfg)
 
 **EasyChat** is a **Godot 4** addon that adds a reusable UI node for **in-game chat** and a **command console** with autocomplete. It works in **offline mode** (single player or no network session) and in **real-time multiplayer** when combined with the **LinkUx** addon, which abstracts LAN or online backends and keeps the same logical flow regardless of the active backend.
 
@@ -45,12 +45,16 @@ This document describes **every** piece of the addon: exported properties, the s
 
 - **Custom node** registered in the editor as type **EasyChat** (extends `Control`), with its own icon.
 - **`EasyChat` singleton** registered automatically when the plugin is enabled; global API to open/close, post messages, and set the player name from any script.
-- **`EasyChatConfig` resource**: appearance (panels, borders, radii, colours, fonts), behaviour (close on send, history limits, notifications), animations, layout, sounds, and command list — all in a single `.tres` file you can share across scenes.
+- **Simplified but stronger customization system**: `EasyChatConfig` centralizes appearance, behavior, layout, sounds, commands, and animations in a single reusable `.tres`.
+- **StyleBox per element**: history, autocomplete, suggestion rows, input, send button, and notifications now accept `StyleBox` resources with built-in default fallbacks.
+- **Expanded animations**: all animatable chat blocks support `NONE`, `FADE`, `FADE_UP`, `FADE_DOWN`, `FADE_LEFT`, `FADE_RIGHT`, `SLIDE_*`, and `SCALE`.
+- **Per-subgroup Slide Distance**: `History Panel`, `Input Row`, `History messages`, and `Notification` each have their own slide distance property.
 - **`ChatCommand` resource**: name, aliases, description, documented usage, and `executed(args)` signal. Connect the signal from any script anywhere in your project.
 - **History** with a configurable limit; oldest messages are removed automatically when the limit is exceeded.
 - **Non-blocking overlay**: the root node uses `mouse_filter = IGNORE` so it never steals game clicks; only when the chat opens does the cursor become visible and `InputMap` actions are released.
 - **Autocomplete** for commands when typing `/`, with keyboard navigation (↑↓ Tab) and mouse clicks.
 - **Floating notifications** when a message arrives while the panel is closed (or when sending with `close_on_send`), with configurable stack size, duration, and entry animation.
+- **Advanced editor preview**: new **Preview** section with interactive buttons to rebuild, toggle visibility, and test animations/messages/notifications directly in the editor.
 - **Optional multiplayer** via **LinkUx**: RPC registration, broadcast on send, local name from `LinkUx.get_local_player_name()`, visibility tied to session state, and forced close when the session ends.
 
 ---
@@ -240,19 +244,23 @@ func _on_game_paused() -> void:
 
 ### `AnimType` enum
 
-Controls how the **history panel**, **input row**, and **notifications** animate.
+Controls how the **history panel**, **input row**, **history messages**, and **notifications** animate.
 
 | Value | Meaning |
 |-------|---------|
 | `NONE` | Instant show/hide (no transition). |
-| `FADE` | Fade using `modulate.a`. The input row retains `alpha_input_closed` opacity when the chat is closed. |
+| `FADE` | Fade using `modulate.a`. |
+| `FADE_UP` | Fade + upward offset motion on enter (inverse on hide). |
+| `FADE_DOWN` | Fade + downward offset motion on enter (inverse on hide). |
+| `FADE_LEFT` | Fade + horizontal offset from left on enter (inverse on hide). |
+| `FADE_RIGHT` | Fade + horizontal offset from right on enter (inverse on hide). |
 | `SLIDE_UP` | History enters from below; exits downward on close. |
 | `SLIDE_DOWN` | History enters from above; exits upward on close. |
 | `SLIDE_LEFT` | Enters from the left; exits left. |
 | `SLIDE_RIGHT` | Enters from the right; exits right. |
 | `SCALE` | Vertical scale from near-zero to 1, pivot at the bottom edge. `BACK` easing when showing, `CUBIC` when hiding. |
 
-Slide and scale distances use `panel_height` for the history panel and `input_height` for the input row.
+Slide distances are now **configured per animation subgroup** through dedicated `*_slide_distance` properties.
 
 ### Appearance group
 
@@ -260,33 +268,26 @@ Slide and scale distances use `panel_height` for the history panel and `input_he
 
 | Property | Type | Default | Use |
 |----------|------|---------|-----|
-| `history_bg_color` | `Color` | Dark semi-transparent | Panel background. |
-| `history_corner_tl/tr/bl/br` | `int` | 6, 6, 0, 0 | Corner radii in pixels. |
-| `history_border_*` | `int` | 0 | Border width per side; 0 = disabled. |
-| `history_border_color` | `Color` | Grey semi-transparent | Border colour when any width > 0. |
+| `history_style` | `StyleBox` | `null` | StyleBox used by the history panel. `null` uses the built-in default style. |
 
 #### Autocomplete subgroup
 
 | Property | Type | Use |
 |----------|------|-----|
-| `autocomplete_bg_color` | `Color` | Suggestion panel background. |
-| `autocomplete_selected_color` | `Color` | Highlighted row (keyboard selection or mouse hover). |
+| `autocomplete_style` | `StyleBox` | Suggestion panel StyleBox. |
+| `autocomplete_item_style` | `StyleBox` | StyleBox for non-selected suggestion rows. |
+| `autocomplete_selected_style` | `StyleBox` | StyleBox for the selected/highlighted row. |
 | `autocomplete_command_color` | `Color` | `/command` name text colour. |
 | `autocomplete_desc_color` | `Color` | Description text colour. |
 | `autocomplete_font_size` | `int` | Font size in the suggestion list. |
 | `autocomplete_font` | `Font` | Optional custom font for command and description labels. |
-| `autocomplete_corner_*` | `int` | Panel corner radii. |
-| `autocomplete_border_*` | `int` | Border width per side. |
-| `autocomplete_border_color` | `Color` | Border colour. |
 
 #### Input subgroup (`LineEdit`)
 
 | Property | Type | Use |
 |----------|------|-----|
-| `input_bg_color`, `input_focus_color` | `Color` | Normal and focused background. |
-| `input_border_color`, `input_focus_border_color` | `Color` | Normal and focused border colour. |
-| `input_corner_*` | `int` | Corner radii (defaults: bottom corners rounded). |
-| `input_border_*` | `int` | Border width per side. |
+| `input_style` | `StyleBox` | Input StyleBox in normal state. |
+| `input_focus_style` | `StyleBox` | Input StyleBox when focused. |
 | `input_font_size` | `int` | Typed text size. |
 | `input_font` | `Font` | Optional custom font for typed text and placeholder. |
 | `input_caret_color` | `Color` | Text cursor colour. |
@@ -297,14 +298,12 @@ Slide and scale distances use `panel_height` for the history panel and `input_he
 
 | Property | Type | Use |
 |----------|------|-----|
+| `send_button_style` | `StyleBox` | Send button StyleBox in normal state. |
+| `send_button_hover_style` | `StyleBox` | Send button StyleBox in hover/pressed state. |
 | `send_button_text` | `String` | Button label (default: return symbol `↵`). |
-| `send_button_bg_color`, `send_button_hover_color` | `Color` | Normal and hover/pressed background. |
 | `send_button_text_color` | `Color` | Button text colour. |
 | `send_button_font_size` | `int` | Font size. |
 | `send_button_font` | `Font` | Optional custom font for the button label. |
-| `send_corner_*` | `int` | Button corner radii. |
-| `send_border_*` | `int` | Border width per side. |
-| `send_border_color`, `send_border_hover_color` | `Color` | Border colour in normal and hover states. |
 
 #### Messages subgroup (history)
 
@@ -322,11 +321,8 @@ Slide and scale distances use `panel_height` for the history panel and `input_he
 
 | Property | Type | Use |
 |----------|------|-----|
+| `notification_style` | `StyleBox` | StyleBox for each stacked notification entry. |
 | `notification_color` | `Color` | Floating notification text colour. |
-| `notification_bg_color` | `Color` | Panel background (alpha 0 = invisible background). |
-| `notification_corner_*` | `int` | Corner radii. |
-| `notification_border_*` | `int` | Border width per side. |
-| `notification_border_color` | `Color` | Border colour. |
 | `notification_font_size` | `int` | Text size. |
 | `notification_font` | `Font` | Optional custom font for notification text. |
 
@@ -336,7 +332,7 @@ Slide and scale distances use `panel_height` for the history panel and `input_he
 |----------|------|---------|-------------|
 | `show_send_button` | `bool` | `true` | Show or hide the send button. |
 | `close_on_send` | `bool` | `false` | Close chat after sending a message **or** executing a command. The last sent line may appear briefly as a notification. |
-| `alpha_input_closed` | `float` | `0.35` | Input row opacity when chat is closed with `FADE` or `NONE` animation. Set to `0.0` to fully hide it. |
+| `alpha_input_closed` | `float` | `0.35` | Input row opacity when chat is closed with `FADE`, `FADE_*`, or `NONE`. |
 | `notification_alpha` | `float` | `0.75` | Maximum opacity reached during a notification's fade-in. |
 | `notification_duration` | `float` | `3.0` | Seconds a notification stays fully visible before fading out. |
 | `max_messages` | `int` | `100` | Maximum lines in history; the oldest message is removed when this limit is exceeded. |
@@ -351,6 +347,7 @@ Slide and scale distances use `panel_height` for the history panel and `input_he
 |----------|------|---------|
 | `history_anim_type` | `AnimType` | `FADE` |
 | `history_anim_duration` | `float` | `0.18` s |
+| `history_slide_distance` | `float` | `206.0` px |
 
 #### Input Row subgroup
 
@@ -358,8 +355,19 @@ Slide and scale distances use `panel_height` for the history panel and `input_he
 |----------|------|---------|
 | `input_anim_type` | `AnimType` | `FADE` |
 | `input_anim_duration` | `float` | `0.18` s |
+| `input_slide_distance` | `float` | `42.0` px |
 
-With **SLIDE** or **SCALE** types, the input row is **fully hidden** when chat is closed (not just dimmed to `alpha_input_closed`).
+With **FADE** and **FADE_*** types, the input row returns to `alpha_input_closed` on close. With **SLIDE** or **SCALE**, it becomes fully hidden.
+
+#### History messages subgroup
+
+| Property | Type | Default |
+|----------|------|---------|
+| `message_anim_type` | `AnimType` | `NONE` |
+| `message_anim_duration` | `float` | `0.12` s |
+| `message_slide_distance` | `float` | `28.0` px |
+
+Controls the appearance animation of each newly appended history message.
 
 #### Notification subgroup
 
@@ -367,6 +375,17 @@ With **SLIDE** or **SCALE** types, the input row is **fully hidden** when chat i
 |----------|------|---------|
 | `notification_anim_type` | `AnimType` | `FADE` |
 | `notification_anim_duration` | `float` | `0.15` s |
+| `notification_slide_distance` | `float` | `28.0` px |
+
+### Advanced StyleBox customization workflow (recommended)
+
+1. Create a `StyleBoxFlat` or `StyleBoxTexture` in the Inspector.
+2. Tune background, border, corner radius, and content margins.
+3. Assign it to the matching `*_style` property.
+4. Reuse the same resource across multiple elements/configs for consistent skins.
+5. Set the style property to `null` to fall back to EasyChat built-in defaults.
+
+This enables deep visual customization without editing `easychat_node.gd`.
 
 ### Layout group
 
@@ -1047,9 +1066,15 @@ EasyChat.add_system_message("The round has started!")
 
 - The history panel and input row use **independent tweens** on open/close.
 - Reopening while the close animation is still running: the previous tween is `kill()`ed and a new one starts.
-- **FADE on input row**: on open it transitions from `alpha_input_closed` to full opacity; on close it returns to `alpha_input_closed` (FADE type) or to `0` (all other types).
+- **New directional fades (`FADE_UP/DOWN/LEFT/RIGHT`)** combine opacity and offset movement using the subgroup slide distance.
+- **FADE on input row**: on open it transitions from `alpha_input_closed` to full opacity; on close it returns to `alpha_input_closed` for `FADE` and `FADE_*`.
 - **SCALE**: vertical pivot at the bottom edge of the control (`pivot_offset.y` = `size.y` or `slide_dist`). Uses `TRANS_BACK` easing when appearing and `TRANS_CUBIC` when hiding.
 - **SLIDE** types: use `offset_*` properties (not `position`) so the animation respects anchored layouts.
+- **Per-subgroup distances**:
+  - `history_slide_distance` for History Panel.
+  - `input_slide_distance` for Input Row.
+  - `message_slide_distance` for History messages.
+  - `notification_slide_distance` for Notification.
 - **Forced close** (`_force_close`): kills both tweens immediately, snaps all properties to their closed state, and hides the autocomplete panel. Used when a session ends or `disable()` is called.
 
 ---
@@ -1089,12 +1114,48 @@ All sounds share a single `AudioStreamPlayer` child node. If a new sound trigger
 
 ## Editor preview
 
-The node script runs `@tool`, enabling a live preview in the editor:
+The node script runs `@tool`, enabling a full live preview workflow directly in the editor through the **Preview** section:
 
 - Assigning or modifying the **config** resource updates the preview immediately via the `config.changed` signal.
-- `_rebuild()` frees all UI children and rebuilds them from scratch, leaving the chat in **open** state so you can inspect all panels.
+- `_rebuild()` frees all UI children and rebuilds them from scratch, restoring the baseline preview state.
 - `_ready()` in the editor only builds the preview; it does **not** register the singleton, set up multiplayer, or connect game signals.
 - Changing `config` properties (colours, layout, animations, etc.) reflects in the viewport while editing.
+
+### Preview section buttons and what each one does
+
+#### Rebuild Preview
+
+- **`Rebuild Preview`**: rebuilds the full UI and clears residual states from preview animations.
+
+#### Visibility
+
+- **`preview_history`**: show/hide the history panel.
+- **`preview_input`**: show/hide the input row.
+- **`preview_autocomplete`**: show/hide the autocomplete panel.
+- **`preview_notification`**: show/hide the notification container.
+
+#### Show-Hide Animations
+
+- **`History Panel — Show`**: plays the same open animation used in-game for the history panel.
+- **`History Panel — Hide`**: plays the same close animation used in-game for the history panel.
+- **`Input Row — Show`**: plays the same open animation used in-game for the input row.
+- **`Input Row — Hide`**: plays the same close animation used in-game for the input row.
+
+#### Messages
+
+- **`Local Message`**: appends a sample local message to history.
+- **`Remote Message`**: appends a sample remote message to history.
+- **`System Message`**: appends a sample system message.
+- **`Clear History`**: clears all history lines.
+
+#### Notifications
+
+- **`Message Notification`**: spawns a sample regular notification.
+- **`System Notification`**: spawns a sample system notification.
+
+#### Commands
+
+- **`Show Commands`**: populates autocomplete with all commands from `config.commands` and makes the panel visible for styling checks.
 
 ---
 
@@ -1194,7 +1255,7 @@ If you change `preload` paths in `plugin.gd` (e.g. after moving the addon folder
 
 ## Credits
 
-- **EasyChat** — IUX Games, Isaackiux (version **1.1.0**).
+- **EasyChat** — IUX Games, Isaackiux (version **2.0.0**).
 
 ---
 

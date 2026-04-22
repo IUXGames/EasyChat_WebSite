@@ -3,7 +3,7 @@
 # EasyChat
 
 [![Godot 4](https://img.shields.io/badge/Godot-4.x-478cbf?logo=godotengine&logoColor=white)](https://godotengine.org/)
-[![Version](https://img.shields.io/badge/version-1.1.0-5aafff)](./plugin.cfg)
+[![Version](https://img.shields.io/badge/version-2.0.0-5aafff)](./plugin.cfg)
 
 **EasyChat** es un addon para **Godot 4** que añade un nodo de interfaz reutilizable para **chat en juego** y **consola de comandos** con autocompletado. Funciona en **modo offline** (un solo jugador o sin sesión de red) y en **multijugador en tiempo real** cuando se combina con el addon **LinkUx**, que abstrae backends LAN u online y mantiene el mismo flujo lógico independientemente del backend activo.
 
@@ -45,12 +45,16 @@ Este documento describe **todas** las piezas del addon: propiedades exportadas, 
 
 - **Nodo personalizado** registrado en el editor como tipo **EasyChat** (hereda de `Control`), con icono propio.
 - **Singleton `EasyChat`** registrado automáticamente al activar el plugin; API global para abrir/cerrar, inyectar mensajes y establecer el nombre de jugador desde cualquier script.
-- **Recurso `EasyChatConfig`**: apariencia (paneles, bordes, radios, colores, fuentes), comportamiento (cierre al enviar, límite de historial, notificaciones), animaciones, layout, sonidos y lista de comandos — todo en un único archivo `.tres` reutilizable entre escenas.
+- **Sistema de personalización simplificado y robusto**: `EasyChatConfig` concentra apariencia, comportamiento, layout, sonidos, comandos y animaciones en un único `.tres`.
+- **StyleBox por elemento**: historial, autocompletado, filas de sugerencia, input, botón enviar y notificaciones aceptan recursos `StyleBox` con fallback visual predeterminado.
+- **Animaciones expandidas**: todos los bloques animables soportan `NONE`, `FADE`, `FADE_UP`, `FADE_DOWN`, `FADE_LEFT`, `FADE_RIGHT`, `SLIDE_*` y `SCALE`.
+- **Slide Distance por subgrupo**: `History Panel`, `Input Row`, `History messages` y `Notification` tienen su propia distancia en píxeles.
 - **Recurso `ChatCommand`**: nombre, alias, descripción, documentación de uso y señal `executed(args)`. Conecta la señal desde cualquier script de tu proyecto.
 - **Historial** con límite configurable; los mensajes más antiguos se eliminan automáticamente al superar el máximo.
 - **Overlay no bloqueante**: el nodo raíz usa `mouse_filter = IGNORE` y nunca absorbe clics del juego; solo al abrir el chat se fuerza el cursor visible y se liberan acciones del `InputMap`.
 - **Autocompletado** de comandos al escribir `/`, con navegación por teclado (↑↓ Tab) y clic de ratón.
 - **Notificaciones flotantes** cuando llega un mensaje con el panel cerrado (o al enviar con `close_on_send`), con cantidad simultánea, duración y animación de entrada configurables.
+- **Vista previa avanzada en editor**: nueva sección **Preview** con botones interactivos para reconstruir, alternar visibilidad y reproducir animaciones/mensajes/notificaciones en tiempo real.
 - **Multijugador opcional** vía **LinkUx**: registro de RPC, broadcast al enviar, nombre local desde `LinkUx.get_local_player_name()`, visibilidad ligada al estado de sesión y cierre forzado al terminar la sesión.
 
 ---
@@ -240,19 +244,23 @@ func _on_game_paused() -> void:
 
 ### Enumeración `AnimType`
 
-Controla cómo animan el **panel de historial**, la **fila de entrada** y las **notificaciones**.
+Controla cómo animan el **panel de historial**, la **fila de entrada**, los **mensajes de historial** y las **notificaciones**.
 
 | Valor | Significado |
 |-------|-------------|
 | `NONE` | Mostrar/ocultar al instante (sin transición). |
-| `FADE` | Fundido con `modulate.a`. La fila de entrada mantiene opacidad `alpha_input_closed` al cerrar. |
+| `FADE` | Fundido con `modulate.a`. |
+| `FADE_UP` | Fundido + desplazamiento vertical hacia arriba al entrar (inverso al salir). |
+| `FADE_DOWN` | Fundido + desplazamiento vertical hacia abajo al entrar (inverso al salir). |
+| `FADE_LEFT` | Fundido + desplazamiento horizontal desde la izquierda (inverso al salir). |
+| `FADE_RIGHT` | Fundido + desplazamiento horizontal desde la derecha (inverso al salir). |
 | `SLIDE_UP` | El historial entra desde abajo; al cerrar sale hacia abajo. |
 | `SLIDE_DOWN` | El historial entra desde arriba; al cerrar sale hacia arriba. |
 | `SLIDE_LEFT` | Entra desde la izquierda; al cerrar sale a la izquierda. |
 | `SLIDE_RIGHT` | Entra desde la derecha; al cerrar sale a la derecha. |
 | `SCALE` | Escala vertical desde casi cero hasta 1, pivote en el borde inferior. Easing `BACK` al aparecer, `CUBIC` al ocultar. |
 
-Las distancias de slide y escala usan `panel_height` para el historial e `input_height` para la fila de entrada.
+Las distancias de desplazamiento ahora son **configurables por subgrupo** en `Animations` con propiedades `*_slide_distance`.
 
 ### Grupo Appearance
 
@@ -260,33 +268,26 @@ Las distancias de slide y escala usan `panel_height` para el historial e `input_
 
 | Propiedad | Tipo | Por defecto | Uso |
 |-----------|------|-------------|-----|
-| `history_bg_color` | `Color` | Oscuro semitransparente | Fondo del panel. |
-| `history_corner_tl/tr/bl/br` | `int` | 6, 6, 0, 0 | Radios de esquina en píxeles. |
-| `history_border_*` | `int` | 0 | Grosor del borde por lado; 0 = desactivado. |
-| `history_border_color` | `Color` | Gris semitransparente | Color del borde cuando algún grosor > 0. |
+| `history_style` | `StyleBox` | `null` | StyleBox del panel de historial. Si es `null`, usa estilo predeterminado integrado. |
 
 #### Subgrupo Autocomplete
 
 | Propiedad | Tipo | Uso |
 |-----------|------|-----|
-| `autocomplete_bg_color` | `Color` | Fondo del panel de sugerencias. |
-| `autocomplete_selected_color` | `Color` | Fila resaltada (selección de teclado o hover). |
+| `autocomplete_style` | `StyleBox` | StyleBox del panel de sugerencias. |
+| `autocomplete_item_style` | `StyleBox` | StyleBox para filas no seleccionadas. |
+| `autocomplete_selected_style` | `StyleBox` | StyleBox para la fila seleccionada/resaltada. |
 | `autocomplete_command_color` | `Color` | Color del texto del nombre `/comando`. |
 | `autocomplete_desc_color` | `Color` | Color del texto de la descripción. |
 | `autocomplete_font_size` | `int` | Tamaño de fuente en la lista de sugerencias. |
 | `autocomplete_font` | `Font` | Fuente personalizada opcional para comando y descripción. |
-| `autocomplete_corner_*` | `int` | Radios del panel. |
-| `autocomplete_border_*` | `int` | Grosor del borde por lado. |
-| `autocomplete_border_color` | `Color` | Color del borde. |
 
 #### Subgrupo Input (`LineEdit`)
 
 | Propiedad | Tipo | Uso |
 |-----------|------|-----|
-| `input_bg_color`, `input_focus_color` | `Color` | Fondo normal y con foco. |
-| `input_border_color`, `input_focus_border_color` | `Color` | Borde normal y con foco. |
-| `input_corner_*` | `int` | Radios de esquina (por defecto inferiores redondeados). |
-| `input_border_*` | `int` | Grosor del borde por lado. |
+| `input_style` | `StyleBox` | StyleBox del input en estado normal. |
+| `input_focus_style` | `StyleBox` | StyleBox del input cuando tiene foco. |
 | `input_font_size` | `int` | Tamaño del texto escrito. |
 | `input_font` | `Font` | Fuente personalizada opcional para texto y placeholder. |
 | `input_caret_color` | `Color` | Color del cursor de texto. |
@@ -297,14 +298,12 @@ Las distancias de slide y escala usan `panel_height` para el historial e `input_
 
 | Propiedad | Tipo | Uso |
 |-----------|------|-----|
+| `send_button_style` | `StyleBox` | StyleBox normal del botón enviar. |
+| `send_button_hover_style` | `StyleBox` | StyleBox hover/pressed del botón enviar. |
 | `send_button_text` | `String` | Etiqueta del botón (por defecto símbolo `↵`). |
-| `send_button_bg_color`, `send_button_hover_color` | `Color` | Fondo normal y hover/pulsado. |
 | `send_button_text_color` | `Color` | Color del texto del botón. |
 | `send_button_font_size` | `int` | Tamaño de fuente. |
 | `send_button_font` | `Font` | Fuente personalizada opcional para la etiqueta del botón. |
-| `send_corner_*` | `int` | Radios del botón. |
-| `send_border_*` | `int` | Grosor del borde por lado. |
-| `send_border_color`, `send_border_hover_color` | `Color` | Borde normal y hover/pulsado. |
 
 #### Subgrupo Messages (historial)
 
@@ -322,11 +321,8 @@ Las distancias de slide y escala usan `panel_height` para el historial e `input_
 
 | Propiedad | Tipo | Uso |
 |-----------|------|-----|
+| `notification_style` | `StyleBox` | StyleBox de cada notificación apilada. |
 | `notification_color` | `Color` | Color del texto de la notificación flotante. |
-| `notification_bg_color` | `Color` | Fondo del panel (alfa 0 = fondo invisible). |
-| `notification_corner_*` | `int` | Radios de esquina. |
-| `notification_border_*` | `int` | Grosor del borde por lado. |
-| `notification_border_color` | `Color` | Color del borde. |
 | `notification_font_size` | `int` | Tamaño del texto. |
 | `notification_font` | `Font` | Fuente personalizada opcional para el texto de notificación. |
 
@@ -336,7 +332,7 @@ Las distancias de slide y escala usan `panel_height` para el historial e `input_
 |-----------|------|-------------|-------------|
 | `show_send_button` | `bool` | `true` | Muestra u oculta el botón de enviar. |
 | `close_on_send` | `bool` | `false` | Cierra el chat después de enviar un mensaje **o** ejecutar un comando. El último mensaje puede aparecer brevemente como notificación. |
-| `alpha_input_closed` | `float` | `0.35` | Opacidad de la fila de entrada con el chat cerrado si la animación es `FADE` o `NONE`. Pon `0.0` para ocultarla por completo. |
+| `alpha_input_closed` | `float` | `0.35` | Opacidad de la fila de entrada con el chat cerrado si la animación es `FADE`, `FADE_*` o `NONE`. |
 | `notification_alpha` | `float` | `0.75` | Opacidad máxima alcanzada durante el fade-in de una notificación. |
 | `notification_duration` | `float` | `3.0` | Segundos que una notificación permanece completamente visible antes de hacer fade-out. |
 | `max_messages` | `int` | `100` | Máximo de líneas en el historial; el mensaje más antiguo se elimina al superarse el límite. |
@@ -351,6 +347,7 @@ Las distancias de slide y escala usan `panel_height` para el historial e `input_
 |-----------|------|-------------|
 | `history_anim_type` | `AnimType` | `FADE` |
 | `history_anim_duration` | `float` | `0.18` s |
+| `history_slide_distance` | `float` | `206.0` px |
 
 #### Subgrupo Input Row
 
@@ -358,8 +355,19 @@ Las distancias de slide y escala usan `panel_height` para el historial e `input_
 |-----------|------|-------------|
 | `input_anim_type` | `AnimType` | `FADE` |
 | `input_anim_duration` | `float` | `0.18` s |
+| `input_slide_distance` | `float` | `42.0` px |
 
-Con los tipos **SLIDE** o **SCALE**, la fila de entrada queda **completamente oculta** cuando el chat está cerrado (no solo atenuada a `alpha_input_closed`).
+Con tipos **FADE** y **FADE_***, la fila de entrada vuelve a `alpha_input_closed` al cerrar. Con **SLIDE** o **SCALE**, queda totalmente oculta.
+
+#### Subgrupo History messages
+
+| Propiedad | Tipo | Por defecto |
+|-----------|------|-------------|
+| `message_anim_type` | `AnimType` | `NONE` |
+| `message_anim_duration` | `float` | `0.12` s |
+| `message_slide_distance` | `float` | `28.0` px |
+
+Controla la animación de aparición de cada nueva línea en el historial.
 
 #### Subgrupo Notification
 
@@ -367,6 +375,17 @@ Con los tipos **SLIDE** o **SCALE**, la fila de entrada queda **completamente oc
 |-----------|------|-------------|
 | `notification_anim_type` | `AnimType` | `FADE` |
 | `notification_anim_duration` | `float` | `0.15` s |
+| `notification_slide_distance` | `float` | `28.0` px |
+
+### Personalización avanzada con StyleBox (recomendado)
+
+1. Crea un `StyleBoxFlat` o `StyleBoxTexture` desde el Inspector.
+2. Ajusta fondo, borde, radios y márgenes internos.
+3. Asigna ese recurso a la propiedad `*_style` correspondiente.
+4. Reutiliza el mismo recurso en varios elementos o varios configs para mantener consistencia visual.
+5. Si quieres volver al look nativo del addon, deja la propiedad en `null`.
+
+Esta arquitectura permite pieles visuales muy complejas sin tocar `easychat_node.gd`.
 
 ### Grupo Layout
 
@@ -1045,9 +1064,15 @@ EasyChat.add_system_message("¡La ronda ha comenzado!")
 
 - El panel de historial y la fila de entrada usan **tweens independientes** al abrir/cerrar.
 - Si se reabre mientras la animación de cierre aún está en curso: el tween anterior recibe `kill()` y comienza uno nuevo.
-- **FADE en la fila de entrada**: al abrir transiciona desde `alpha_input_closed` hasta opacidad completa; al cerrar vuelve a `alpha_input_closed` (tipo FADE) o a `0` (todos los demás tipos).
+- **Nuevos FADE direccionales (`FADE_UP/DOWN/LEFT/RIGHT`)**: combinan fundido + desplazamiento usando el `slide_distance` del subgrupo correspondiente.
+- **FADE en la fila de entrada**: al abrir transiciona desde `alpha_input_closed` hasta opacidad completa; al cerrar vuelve a `alpha_input_closed` para `FADE` y `FADE_*`.
 - **SCALE**: pivote vertical en el borde inferior del control (`pivot_offset.y` = `size.y` o `slide_dist`). Usa easing `TRANS_BACK` al aparecer y `TRANS_CUBIC` al ocultarse.
 - **Tipos SLIDE**: usan propiedades `offset_*` (no `position`) para respetar el layout anclado.
+- **Distancias por subgrupo**:
+  - `history_slide_distance` para History Panel.
+  - `input_slide_distance` para Input Row.
+  - `message_slide_distance` para History messages.
+  - `notification_slide_distance` para Notification.
 - **Cierre forzado** (`_force_close`): mata ambos tweens inmediatamente, fija todos los valores en estado cerrado y oculta el panel de autocompletado. Se usa cuando una sesión termina o se llama a `disable()`.
 
 ---
@@ -1087,12 +1112,48 @@ Todos los sonidos comparten un único nodo `AudioStreamPlayer` hijo. Si se dispa
 
 ## Vista previa en el editor
 
-El script del nodo lleva `@tool`, lo que permite una vista previa en tiempo real en el editor:
+El script del nodo lleva `@tool`, lo que permite una vista previa en tiempo real en el editor con una sección **Preview** completa:
 
 - Asignar o modificar el recurso **config** actualiza la vista previa inmediatamente vía la señal `config.changed`.
-- `_rebuild()` libera todos los hijos de UI y los reconstruye desde cero, dejando el chat en estado **abierto** para que puedas inspeccionar todos los paneles.
+- `_rebuild()` libera todos los hijos de UI y los reconstruye desde cero, restaurando el estado base de previsualización.
 - `_ready()` en el editor solo construye la vista previa; **no** registra el singleton, configura el multijugador ni conecta señales de juego.
 - Cambiar propiedades del config (colores, layout, animaciones, etc.) se refleja en el viewport mientras editas.
+
+### Botones de la sección Preview y para qué sirven
+
+#### Rebuild Preview
+
+- **`Rebuild Preview`**: reconstruye toda la UI y limpia estados residuales de animaciones de prueba.
+
+#### Visibility
+
+- **`preview_history`**: muestra/oculta el panel de historial.
+- **`preview_input`**: muestra/oculta la fila de entrada.
+- **`preview_autocomplete`**: muestra/oculta el panel de autocompletado.
+- **`preview_notification`**: muestra/oculta el contenedor de notificaciones.
+
+#### Show-Hide Animations
+
+- **`History Panel — Show`**: reproduce la animación de apertura del historial con los valores actuales de `Animations`.
+- **`History Panel — Hide`**: reproduce la animación de cierre del historial.
+- **`Input Row — Show`**: reproduce la animación de apertura de la fila de entrada.
+- **`Input Row — Hide`**: reproduce la animación de cierre de la fila de entrada.
+
+#### Messages
+
+- **`Local Message`**: agrega un mensaje de ejemplo local al historial.
+- **`Remote Message`**: agrega un mensaje de ejemplo remoto al historial.
+- **`System Message`**: agrega un mensaje de sistema de ejemplo.
+- **`Clear History`**: limpia todas las líneas del historial.
+
+#### Notifications
+
+- **`Message Notification`**: crea una notificación de ejemplo tipo mensaje.
+- **`System Notification`**: crea una notificación de ejemplo tipo sistema.
+
+#### Commands
+
+- **`Show Commands`**: rellena el autocompletado con todos los comandos de `config.commands` y muestra el panel para inspección visual.
 
 ---
 
@@ -1192,7 +1253,7 @@ Si cambias las rutas de `preload` en `plugin.gd` (p. ej. tras mover la carpeta d
 
 ## Créditos
 
-- **EasyChat** — IUX Games, Isaackiux (versión **1.1.0**).
+- **EasyChat** — IUX Games, Isaackiux (versión **2.0.0**).
 
 ---
 
