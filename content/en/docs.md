@@ -3,7 +3,7 @@
 # EasyChat
 
 [![Godot 4](https://img.shields.io/badge/Godot-4.x-478cbf?logo=godotengine&logoColor=white)](https://godotengine.org/)
-[![Version](https://img.shields.io/badge/version-2.0.0-5aafff)](./plugin.cfg)
+[![Version](https://img.shields.io/badge/version-2.1.1-5aafff)](./plugin.cfg)
 
 **EasyChat** is a **Godot 4** addon that adds a reusable UI node for **in-game chat** and a **command console** with autocomplete. It works in **offline mode** (single player or no network session) and in **real-time multiplayer** when combined with the **LinkUx** addon, which abstracts LAN or online backends and keeps the same logical flow regardless of the active backend.
 
@@ -1255,7 +1255,7 @@ If you change `preload` paths in `plugin.gd` (e.g. after moving the addon folder
 
 ## Credits
 
-- **EasyChat** — IUX Games, Isaackiux (version **2.0.0**).
+- **EasyChat** — IUX Games, Isaackiux (version **2.1.1**).
 
 ---
 
